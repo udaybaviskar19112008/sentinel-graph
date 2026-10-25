@@ -1,8 +1,8 @@
 """Offline training for the topology MemAE and the late-fusion meta-model.
 
-    python scripts/train_orchestrator.py --debug-slice 100
+    python scripts/train_orchestrator.py --debug-slice 100            # data/raw/modern_2026
 
-Stage 7A streams the SpamAssassin corpus lazily, alternating classes and holding
+Stage 7A streams a labelled corpus (``benign/`` and ``phishing/`` folders) lazily, alternating classes and holding
 only a bounded number of emails in flight, through the same extractors
 production uses. Stage 7B cross-fits MemAE so every email's ``memae_loss`` comes
 from a model that never saw it, scores the meta-model on out-of-fold
@@ -57,7 +57,9 @@ from src.topology.memae_model import GraphMemAE  # noqa: E402
 
 logger = get_logger("training")
 
-LABEL_DIRECTORIES: Final = {"easy_ham": 0, "spam": 1}
+# modern_2026 (and synthetic_2026) use benign/phishing; easy_ham/spam reproduce the
+# SpamAssassin 2002 baseline.
+LABEL_DIRECTORIES: Final = {"benign": 0, "phishing": 1, "easy_ham": 0, "spam": 1}
 # SpamAssassin ships a "cmds" file of mv commands in every folder; it is not an email.
 SKIPPED_FILE_NAMES: Final = frozenset({"cmds"})
 MAX_EMAIL_BYTES: Final = 10 * 1024 * 1024
@@ -233,7 +235,7 @@ def train_and_export(
     class_counts = np.bincount(y_labels, minlength=2)
     folds = min(FOLDS, int(class_counts.min()))
     if folds < 2:
-        raise SystemExit(f"Need at least 2 emails of each class to cross-validate; got ham/spam = {class_counts.tolist()}")
+        raise SystemExit(f"Need at least 2 emails of each class to cross-validate; got benign/phishing = {class_counts.tolist()}")
     splits = list(StratifiedKFold(n_splits=folds, shuffle=True, random_state=SEED).split(X_meta_arrays, y_labels))
 
     features = X_meta_arrays.copy()
@@ -248,7 +250,7 @@ def train_and_export(
         oof[valid_index] = forest.predict_proba(features[valid_index])[:, list(forest.classes_).index(1)]
     auc = float(roc_auc_score(y_labels, oof))
     report = classification_report(
-        y_labels, (oof >= 0.5).astype(int), target_names=["ham", "spam"], digits=3, zero_division=0
+        y_labels, (oof >= 0.5).astype(int), target_names=["benign", "phishing"], digits=3, zero_division=0
     )
     print(f"\nOut-of-fold ROC AUC ({folds}-fold stratified): {auc:.4f}\n{report}")
 
@@ -272,7 +274,7 @@ def train_and_export(
     training_report: dict[str, Any] = {
         "trained_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "emails": len(y_labels),
-        "class_counts": {"ham": int(class_counts[0]), "spam": int(class_counts[1])},
+        "class_counts": {"benign": int(class_counts[0]), "phishing": int(class_counts[1])},
         "folds": folds,
         "oof_roc_auc": auc,
         "memae_zero_day_threshold": zero_day_threshold,
@@ -293,20 +295,20 @@ def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
     parser = argparse.ArgumentParser(description="Train MemAE and the fusion meta-model on a labelled corpus.")
     parser.add_argument("--debug-slice", type=int, default=0, help="only the first N emails (classes alternate); 0 = all")
-    parser.add_argument("--data-dir", type=Path, default=settings.BASE_DIR / "data" / "raw" / "spamassassin")
+    parser.add_argument("--data-dir", type=Path, default=settings.BASE_DIR / "data" / "raw" / "modern_2026")
     parser.add_argument("--models-dir", type=Path, default=settings.MODELS_DIR, help="where the runtime loads models")
     parser.add_argument("--extract-only", action="store_true", help="run Stage 7A and stop")
     args = parser.parse_args(argv)
     if args.debug_slice < 0:
         parser.error("--debug-slice must be >= 0")
     if not args.data_dir.is_dir():
-        parser.error(f"corpus not found at {args.data_dir} (expected easy_ham/ and spam/ folders)")
+        parser.error(f"corpus not found at {args.data_dir} (expected benign/ and phishing/ folders; see scripts/fetch_modern_corpus.py)")
 
     configure_logging(level=logging.WARNING)
     try:
         X_meta_arrays, dag_list, y_labels = extract_features_concurrently(args.data_dir, args.debug_slice)
         counts = np.bincount(np.asarray(y_labels, dtype=np.int64), minlength=2)
-        print(f"Extracted {len(y_labels)} emails (ham {counts[0]}, spam {counts[1]})")
+        print(f"Extracted {len(y_labels)} emails (benign {counts[0]}, phishing {counts[1]})")
         if args.extract_only or not y_labels:
             return 0
         report = train_and_export(

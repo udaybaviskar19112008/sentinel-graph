@@ -13,6 +13,9 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "websockets",  # uvicorn's WebSocket protocol implementation
+    "sqlalchemy>=2.0",
+    "aiosqlite",
+    "requests",
     "tldextract",
     "beautifulsoup4",
     "playwright",

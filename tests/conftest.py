@@ -13,7 +13,9 @@ from src.topology.memae_model import GraphMemAE
 from src.vision.brand_detector import VisualSpoofDetector
 from tests.factories import StubSandbox, noise_png
 
-THREE_HOP_ROUTE = RoutingFindings(route_hop_count=3, private_ip_leak=False, timestamp_regression_flag=False)
+THREE_HOP_ROUTE = RoutingFindings(
+    route_hop_count=3, private_ip_leak=False, timestamp_regression_flag=False, extracted_ips=()
+)
 TWO_URLS = ["https://login.evil.example/verify", "https://cdn.evil.example/x7Qz9kP2"]
 
 

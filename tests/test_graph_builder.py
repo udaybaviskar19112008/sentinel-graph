@@ -14,7 +14,9 @@ from src.topology.graph_builder import NODE_FEATURES, NodeType, build_email_dag,
 
 
 def _route(hops: int) -> RoutingFindings:
-    return RoutingFindings(route_hop_count=hops, private_ip_leak=False, timestamp_regression_flag=False)
+    return RoutingFindings(
+        route_hop_count=hops, private_ip_leak=False, timestamp_regression_flag=False, extracted_ips=()
+    )
 
 
 def _edges(data: Data) -> list[tuple[int, int]]:
@@ -99,7 +101,7 @@ def test_oversized_routes_are_capped_and_logged(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("bad", [-1, 2.5, "3", True, None])
 def test_invalid_hop_count_is_rejected(bad: object) -> None:
-    route = {"route_hop_count": bad, "private_ip_leak": False, "timestamp_regression_flag": False}
+    route = {"route_hop_count": bad, "private_ip_leak": False, "timestamp_regression_flag": False, "extracted_ips": ()}
 
     with pytest.raises(ValueError, match="route_hop_count"):
         build_email_dag(route, [])  # type: ignore[arg-type]

@@ -27,13 +27,17 @@ pytestmark = pytest.mark.e2e
 STREAM_TIMEOUT_S = 120.0
 
 # ".invalid" can never resolve (RFC 2606), so detonation fails fast and offline.
+# Newest hop first. The top hop is our own edge-to-inbox relay and is stripped as
+# receiver-internal; below it, the sender side forges a private hop and a clock jump.
 PHISHING_EML = (
     "Received: from mx-edge.corp.example (mx-edge.corp.example [40.107.22.55])\r\n"
-    "\tby inbox.corp.example with ESMTPS id 9F2C1; Tue, 06 Oct 2026 10:02:41 +0000\r\n"
-    "Received: from relay.bulk-sender.invalid (relay [10.0.0.1])\r\n"
-    "\tby mx-edge.corp.example with ESMTP id 7A11B; Tue, 06 Oct 2026 09:55:12 +0000\r\n"
+    "\tby inbox.corp.example with ESMTPS id 9F2C1; Tue, 06 Oct 2026 10:02:50 +0000\r\n"
+    "Received: from relay.bulk-sender.invalid (relay.bulk-sender.invalid [194.26.29.10])\r\n"
+    "\tby mx-edge.corp.example with ESMTPS id 5E77A; Tue, 06 Oct 2026 10:02:41 +0000\r\n"
+    "Received: from internal.bulk-sender.invalid (internal [10.0.0.1])\r\n"
+    "\tby relay.bulk-sender.invalid with ESMTP id 7A11B; Tue, 06 Oct 2026 09:55:12 +0000\r\n"
     "Received: from kit.bulk-sender.invalid (unknown [185.220.101.4])\r\n"
-    "\tby relay.bulk-sender.invalid with ESMTP id 3C0DE; Tue, 06 Oct 2026 10:01:03 +0000\r\n"
+    "\tby internal.bulk-sender.invalid with ESMTP id 3C0DE; Tue, 06 Oct 2026 10:01:03 +0000\r\n"
     "Authentication-Results: mx-edge.corp.example;\r\n"
     "\tspf=fail (sender IP is 185.220.101.4) smtp.mailfrom=apple-id-support.invalid;\r\n"
     "\tdkim=none (message not signed) header.d=none;\r\n"
@@ -124,6 +128,8 @@ def test_websocket_phishing_detonation(client: TestClient) -> None:
     assert (header.spf, header.dkim, header.dmarc) == ("fail", "none", "fail")
     assert header.impersonated_brand == "apple" and header.display_name_spoof_risk == 1.0
     assert header.private_ip_leak is True and header.timestamp_regression_flag is True
+    # Sender side only: our edge relay (40.107.22.55) was stripped as receiver-internal.
+    assert header.extracted_ips == ("185.220.101.4", "10.0.0.1", "194.26.29.10")
     assert header.subject == "Your Apple ID has been locked"
 
     # The lure was handed to the real sandbox; ".invalid" cannot resolve, so nothing was captured.

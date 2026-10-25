@@ -54,7 +54,8 @@ class HeaderForensics(_Contract):
     dmarc: Annotated[AuthResult, Field(description="DMARC alignment/policy result.")]
     arc: Annotated[AuthResult, Field(description="ARC chain validation result.")]
     route_hop_count: Annotated[
-        NonNegativeInt, Field(description="Number of Received hops in the delivery path.")
+        NonNegativeInt,
+        Field(description="Sender-side Received hops, up to the receiver's entry hop (its internal hops excluded)."),
     ]
     private_ip_leak: Annotated[
         bool, Field(description="An RFC 1918 / loopback / link-local address appears in the route.")
@@ -65,8 +66,14 @@ class HeaderForensics(_Contract):
     display_name_spoof_risk: Annotated[
         UnitScore, Field(description="Likelihood the From display name impersonates another identity.")
     ]
+    extracted_ips: Annotated[
+        tuple[str, ...],
+        # Not strict, so a JSON array (a list) validates into the frozen tuple.
+        Field(strict=False, description="Connecting IP of each Received hop, sender side first."),
+    ] = ()
     impersonated_brand: Annotated[
-        str | None, Field(description="Brand named in the display name but not owning the From domain.")
+        str | None,
+        Field(description="Brand named in the display name or subject but not owning the From domain."),
     ] = None
     subject: Annotated[str | None, Field(description="Decoded Subject header.")] = None
     from_domain: Annotated[

@@ -3,6 +3,13 @@
 Hops are evaluated oldest first. Each Received header is written by the receiving
 MTA of that hop, so everything below our boundary is only as trustworthy as the
 sender: forged hops are exactly what these checks look for.
+
+Only the sender-side path is scored. Hops the receiving mail system adds after it
+accepted the message (Gmail's ``by``-only handoffs, a content filter on loopback,
+internal relays) describe the recipient's provider, not the sender, and would let
+a model learn which mailbox a training email came from instead of whether it is
+phishing. They are stripped down to the receiver's entry hop, which is kept: its
+client IP is the last address the sender side presented.
 """
 
 import re
@@ -13,6 +20,7 @@ from email.utils import parsedate_to_datetime
 from itertools import accumulate, pairwise
 from typing import Final, TypedDict
 
+from src.core.domains import registered_domain
 from src.core.logger import get_logger
 from src.core.network import IPAddress, is_bogon, parse_ip
 
@@ -51,6 +59,12 @@ _IP_RE: Final = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 _COMMENT_RE: Final = re.compile(r"\([^()]*\)")
+_BY_HOST_RE: Final = re.compile(r"(?: ^ | \s ) by \s+ (?P<host> [^\s;()\[\]]+ )", re.IGNORECASE | re.VERBOSE)
+# The name the receiving MTA resolved for the client, as in Postfix's "(rdns [ip])". Unlike
+# the HELO name it was not chosen by the client; "unknown" (no dot) never matches.
+_RDNS_RE: Final = re.compile(
+    r""" \( \s* (?P<name> [a-z0-9] [a-z0-9-]* (?: \. [a-z0-9-]+ )+ ) \.? \s+ \[ """, re.IGNORECASE | re.VERBOSE
+)
 
 
 class RoutingFindings(TypedDict):
@@ -59,6 +73,8 @@ class RoutingFindings(TypedDict):
     route_hop_count: int
     private_ip_leak: bool
     timestamp_regression_flag: bool
+    # Connecting IP of each hop, oldest (nearest the sender) first; hops without one are skipped.
+    extracted_ips: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +82,9 @@ class _Hop:
     position: int  # 1 = oldest hop, nearest the sender
     ip: IPAddress | None
     timestamp: datetime | None
+    has_from: bool  # False for "by"-only headers: an MTA's own handoff or local delivery
+    by_domain: str | None  # registered domain of the receiving host (None for IP literals)
+    rdns_domain: str | None  # registered domain the receiving MTA resolved for the client
 
 
 def _hop_ip(received: str) -> IPAddress | None:
@@ -98,6 +117,22 @@ def _hop_timestamp(received: str) -> datetime | None:
     return stamp.replace(tzinfo=UTC) if stamp.tzinfo is None else stamp.astimezone(UTC)
 
 
+def _parse_hop(position: int, received: str) -> _Hop:
+    text = received[:_MAX_RECEIVED_CHARS]
+    from_clause = _FROM_CLAUSE_RE.match(text)
+    by_match = _BY_HOST_RE.search(text, from_clause.end() if from_clause else 0)
+    by_host = by_match["host"] if by_match else None
+    rdns = _RDNS_RE.search(from_clause["clause"]) if from_clause else None
+    return _Hop(
+        position=position,
+        ip=_hop_ip(received),
+        timestamp=_hop_timestamp(received),
+        has_from=from_clause is not None,
+        by_domain=None if by_host is None or parse_ip(by_host) else registered_domain(by_host),
+        rdns_domain=registered_domain(rdns["name"]) if rdns else None,
+    )
+
+
 def _hops(msg: EmailMessage) -> list[_Hop]:
     try:
         received = [str(value) for value in msg.get_all("Received", [])]
@@ -105,10 +140,36 @@ def _hops(msg: EmailMessage) -> list[_Hop]:
         logger.exception("Received headers could not be read", extra={"event": "route.header_error"})
         return []
     # Every MTA prepends its header, so file order is newest first.
-    return [
-        _Hop(position, _hop_ip(value), _hop_timestamp(value))
-        for position, value in enumerate(reversed(received), start=1)
-    ]
+    return [_parse_hop(position, value) for position, value in enumerate(reversed(received), start=1)]
+
+
+def _sender_side(hops: list[_Hop]) -> tuple[list[_Hop], int]:
+    """(hops up to and including the receiver's entry hop, number of receiver hops dropped).
+
+    Walking from the newest hop, a hop belongs to the receiving system when it has no
+    ``from`` clause, when its client is a private or loopback address, or when both its
+    receiving host and the resolved client name sit in the receiver's domain (named by
+    the newest hop that has a ``from`` clause). The first hop that is none of these is
+    the entry hop. The client-chosen HELO name is never consulted, so a sender cannot
+    claim to be the receiver and get the real entry hop stripped. The resolved name is
+    trusted as the receiver recorded it; MTAs that print unverified PTR names (Postfix
+    prints only forward-confirmed ones, else "unknown") weaken that guarantee.
+    """
+    receiver: str | None = None
+    for index in range(len(hops) - 1, -1, -1):
+        hop = hops[index]
+        if not hop.has_from:
+            continue
+        if receiver is None:
+            receiver = hop.by_domain
+        same_receiver = hop.by_domain is not None and hop.by_domain == receiver
+        internal = (hop.ip is not None and is_bogon(hop.ip)) or (
+            same_receiver and (hop.ip is None or hop.rdns_domain == receiver)
+        )
+        if not internal:
+            return hops[: index + 1], len(hops) - index - 1
+    # Every hop is the receiver's own (e.g. same-provider mail): keep the oldest as the hand-off.
+    return hops[:1], max(len(hops) - 1, 0)
 
 
 def _leaked_hops(hops: list[_Hop]) -> list[_Hop]:
@@ -138,9 +199,10 @@ def _regressions(hops: list[_Hop]) -> list[tuple[_Hop, _Hop, float]]:
 def analyze_routing(msg: EmailMessage) -> RoutingFindings:
     """Hop count, mid-route private-address leaks and timestamp regression for ``msg``.
 
-    The result unpacks straight into ``HeaderForensics`` alongside the identity findings.
+    Computed over the sender-side path only (see the module docstring). The result
+    unpacks straight into ``HeaderForensics`` alongside the identity findings.
     """
-    hops = _hops(msg)
+    hops, receiver_hops = _sender_side(_hops(msg))
     leaked = _leaked_hops(hops)
     regressions = _regressions(hops)
 
@@ -168,13 +230,15 @@ def analyze_routing(msg: EmailMessage) -> RoutingFindings:
         route_hop_count=len(hops),
         private_ip_leak=bool(leaked),
         timestamp_regression_flag=bool(regressions),
+        extracted_ips=tuple(str(hop.ip) for hop in hops if hop.ip is not None),
     )
     logger.info(
         "Delivery route analyzed",
         extra={
             "event": "route.analyzed",
             **findings,
-            "hops_with_ip": sum(hop.ip is not None for hop in hops),
+            "receiver_hops_stripped": receiver_hops,
+            "hops_with_ip": len(findings["extracted_ips"]),
             "hops_with_timestamp": sum(hop.timestamp is not None for hop in hops),
         },
     )

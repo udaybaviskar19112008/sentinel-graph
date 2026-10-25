@@ -330,3 +330,41 @@ def test_findings_merge_into_header_forensics() -> None:
     assert forensics.dmarc is AuthStatus.FAIL
     assert forensics.display_name_spoof_risk == 1.0
     assert forensics.impersonated_brand == "apple"
+
+
+# --- subject spoofing ----------------------------------------------------------
+
+
+def test_brand_only_in_subject_is_a_weaker_spoof_signal() -> None:
+    findings = analyze_identity(
+        _msg('From: "Billing Team" <billing@evil.example>', "Subject: Your PayPal account is limited"), BRANDS
+    )
+
+    assert findings["impersonated_brand"] == "paypal"
+    assert findings["display_name_spoof_risk"] == 0.5
+
+
+def test_display_name_spoof_outranks_subject() -> None:
+    findings = analyze_identity(
+        _msg('From: "PayPal" <x@evil.example>', "Subject: Microsoft 365 password expiry"), BRANDS
+    )
+
+    assert findings["impersonated_brand"] == "paypal"
+    assert findings["display_name_spoof_risk"] == 1.0
+
+
+def test_encoded_homoglyph_subject_is_folded_before_matching() -> None:
+    findings = analyze_identity(
+        _msg("From: notices@evil.example", f"Subject: {_b_word('Αpple ID locked')}"), BRANDS
+    )
+
+    assert findings["subject"] == "Αpple ID locked"
+    assert findings["impersonated_brand"] == "apple"
+    assert findings["display_name_spoof_risk"] == 0.5
+
+
+def test_brand_subject_from_the_brands_own_domain_is_clean() -> None:
+    findings = analyze_identity(_msg("From: service@paypal.com", "Subject: Your PayPal receipt"), BRANDS)
+
+    assert findings["display_name_spoof_risk"] == 0.0
+    assert findings["impersonated_brand"] is None

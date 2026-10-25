@@ -22,13 +22,16 @@ def _public_ip(rng: random.Random) -> str:
 
 
 def _received(hops: list[str], start: datetime, rng: random.Random, *, regress_at: int | None) -> list[str]:
+    # Each relay sits in its own organisation and the last hands off to our MX, so the
+    # whole path is sender-side (nothing for receiver-hop stripping to remove).
+    hosts = [f"relay{position}.transit{position}.example" for position in range(len(hops))] + ["mx.corp.example"]
     lines, when = [], start
     for position, ip in enumerate(hops):
         when += timedelta(seconds=rng.randint(1, 90))
         stamp = when - timedelta(minutes=6) if position == regress_at else when
         lines.append(
-            f"Received: from relay{position}.example.net (relay{position}.example.net [{ip}])"
-            f" by mx{position}.example.net with ESMTP id {rng.randrange(16**8):08x}; {format_datetime(stamp)}"
+            f"Received: from {hosts[position]} ({hosts[position]} [{ip}])"
+            f" by {hosts[position + 1]} with ESMTP id {rng.randrange(16**8):08x}; {format_datetime(stamp)}"
         )
     return lines[::-1]  # newest first, as MTAs prepend
 

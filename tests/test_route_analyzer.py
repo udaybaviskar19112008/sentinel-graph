@@ -47,6 +47,7 @@ def test_four_hops_with_injected_private_ip_and_time_travel() -> None:
         "route_hop_count": 4,
         "private_ip_leak": True,
         "timestamp_regression_flag": True,
+        "extracted_ips": (SENDER_IP, "10.0.0.1", RELAY_IP, MX_IP),  # sender side first
     }
 
 
@@ -65,6 +66,7 @@ def test_clean_chronological_route_raises_no_flags() -> None:
         "route_hop_count": 4,
         "private_ip_leak": False,
         "timestamp_regression_flag": False,
+        "extracted_ips": (SENDER_IP, RELAY_IP, MX_IP, "52.100.1.1"),
     }
 
 
@@ -103,7 +105,10 @@ def test_private_hops_at_either_end_are_not_leaks() -> None:
 
     findings = analyze_routing(msg)
 
-    assert findings["route_hop_count"] == 5
+    # The two private hops at the receiving end are the receiver's own and are stripped;
+    # the LAN hop at the start stays but sits before every public hop.
+    assert findings["route_hop_count"] == 3
+    assert findings["extracted_ips"] == ("192.168.1.20", SENDER_IP, MX_IP)
     assert findings["private_ip_leak"] is False
 
 
@@ -130,7 +135,7 @@ def test_connecting_ip_beats_client_chosen_helo(middle_hop: str, leak: bool) -> 
     assert analyze_routing(msg)["private_ip_leak"] is leak
 
 
-def test_unparseable_hops_are_counted_without_crashing() -> None:
+def test_unparseable_hops_do_not_crash() -> None:
     msg = _route(
         "by mx.example.org (Postfix, from userid 1000) id 4Xq; Tue, 06 Oct 2026 10:00:00 +0000",
         "from relay (relay [999.1.1.1]) by mx.example.org; Tue, 99 Foo 2026 25:61:00 +9999",
@@ -138,10 +143,13 @@ def test_unparseable_hops_are_counted_without_crashing() -> None:
         "",
     )
 
+    # No hop shows a valid client outside mx.example.org's own domain, so the whole chain
+    # reads as the receiver's and collapses to its oldest hop.
     assert analyze_routing(msg) == {
-        "route_hop_count": 4,
+        "route_hop_count": 1,
         "private_ip_leak": False,
         "timestamp_regression_flag": False,
+        "extracted_ips": (),  # 999.1.1.1 is not an address
     }
 
 
@@ -152,6 +160,7 @@ def test_message_without_received_headers() -> None:
         "route_hop_count": 0,
         "private_ip_leak": False,
         "timestamp_regression_flag": False,
+        "extracted_ips": (),
     }
 
 

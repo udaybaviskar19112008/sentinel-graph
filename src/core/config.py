@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     CACHE_DIR: Path = _PROJECT_ROOT / _DERIVED_DIRS["CACHE_DIR"]
     LOG_DIR: Path = _PROJECT_ROOT / _DERIVED_DIRS["LOG_DIR"]
 
+    # Scan history. Anchored to the project root, not the working directory.
+    DATABASE_URL: str = f"sqlite+aiosqlite:///{(_PROJECT_ROOT / 'soc_intel.db').as_posix()}"
+
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     LOG_MAX_BYTES: int = Field(default=50 * 1024 * 1024, gt=0)
     LOG_BACKUP_COUNT: int = Field(default=10, ge=0)

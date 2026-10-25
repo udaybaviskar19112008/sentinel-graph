@@ -103,7 +103,7 @@ def test_training_writes_artifacts_the_runtime_loads_as_trained(
     output = capsys.readouterr().out
     assert "Out-of-fold ROC AUC" in output and "precision" in output
     report = json.loads((models / "training_report.json").read_text("utf-8"))
-    assert report["emails"] == 20 and report["class_counts"] == {"ham": 10, "spam": 10}
+    assert report["emails"] == 20 and report["class_counts"] == {"benign": 10, "phishing": 10}
     assert 0.0 <= report["oof_roc_auc"] <= 1.0
     assert report["constant_features"] == VISION_AND_SLM
 

@@ -19,7 +19,8 @@ export interface HeaderForensics {
   route_hop_count: number
   private_ip_leak: boolean
   timestamp_regression_flag: boolean
-  display_name_spoof_risk: number
+  display_name_spoof_risk: number // 1.0 display-name spoof, 0.5 brand only in the subject
+  extracted_ips: string[] // connecting IP of each Received hop, sender side first
   impersonated_brand: string | null
   subject: string | null
   from_domain: string | null

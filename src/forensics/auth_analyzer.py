@@ -16,17 +16,13 @@ from email.utils import parseaddr
 from itertools import accumulate
 from typing import Final, TypedDict
 
-import tldextract
-
 from src.core.charsets import decode_bytes
 from src.core.config import get_settings
+from src.core.domains import registered_domain
 from src.core.logger import get_logger
 from src.schemas import AuthStatus
 
 logger = get_logger(__name__)
-
-# Offline: the bundled public-suffix snapshot only. No fetch at scan time, no cache writes.
-_TLD_EXTRACT: Final = tldextract.TLDExtract(cache_dir=None, suffix_list_urls=())
 
 _METHODS: Final[tuple[str, ...]] = ("spf", "dkim", "dmarc", "arc")
 _RESULT_ALIASES: Final[dict[str, AuthStatus]] = {
@@ -77,6 +73,9 @@ _RESINFO_RE: Final = re.compile(
     """,
     re.IGNORECASE | re.VERBOSE,
 )
+
+DISPLAY_NAME_SPOOF_RISK: Final = 1.0
+SUBJECT_SPOOF_RISK: Final = 0.5
 
 _MAX_DISPLAY_NAME_CHARS: Final = 512
 _TOKEN_RE: Final = re.compile(r"[a-z0-9]+")
@@ -207,15 +206,6 @@ def _first_mailbox(msg: EmailMessage, name: str) -> tuple[str, str | None] | Non
     return _decode_header_text(display_name), address.rpartition("@")[2] if "@" in address else None
 
 
-def _registered_domain(domain: str | None) -> str | None:
-    host = (domain or "").strip().strip("[]").rstrip(".").casefold()
-    if not host:
-        return None
-    parts = _TLD_EXTRACT(host)
-    # IP literals and single-label hosts have no public suffix: keep them verbatim.
-    return f"{parts.domain}.{parts.suffix}" if parts.domain and parts.suffix else host
-
-
 # --- display-name spoofing ----------------------------------------------------
 
 
@@ -306,21 +296,28 @@ def analyze_identity(
     display_name, from_address_domain = _first_mailbox(msg, "From") or ("", None)
     reply_to = _first_mailbox(msg, "Reply-To")
     _, return_path = parseaddr(str(msg.get("Return-Path") or ""))
-    subject = msg.get("Subject")
+    raw_subject = msg.get("Subject")
+    subject = None if raw_subject is None else _decode_header_text(str(raw_subject))
 
-    from_domain = _registered_domain(from_address_domain)
+    from_domain = registered_domain(from_address_domain)
+    # The display name is what the recipient trusts at a glance: full risk. A brand only in
+    # the subject is weaker evidence (marketplaces and forwards mention brands legitimately).
     brand = _impersonated_brand(display_name, from_domain, config_brands, canonical)
+    spoof_risk = DISPLAY_NAME_SPOOF_RISK if brand else 0.0
+    if brand is None and subject:
+        brand = _impersonated_brand(subject, from_domain, config_brands, canonical)
+        spoof_risk = SUBJECT_SPOOF_RISK if brand else 0.0
     findings = IdentityFindings(
         spf=results["spf"],
         dkim=results["dkim"],
         dmarc=results["dmarc"],
         arc=results["arc"],
-        display_name_spoof_risk=1.0 if brand else 0.0,
+        display_name_spoof_risk=spoof_risk,
         impersonated_brand=brand,
-        subject=None if subject is None else _decode_header_text(str(subject)),
+        subject=subject,
         from_domain=from_domain,
-        reply_to_domain=_registered_domain(reply_to[1]) if reply_to else None,
-        return_path_domain=_registered_domain(return_path.rpartition("@")[2] if "@" in return_path else None),
+        reply_to_domain=registered_domain(reply_to[1]) if reply_to else None,
+        return_path_domain=registered_domain(return_path.rpartition("@")[2] if "@" in return_path else None),
     )
     logger.log(
         logging.WARNING if brand else logging.INFO,
