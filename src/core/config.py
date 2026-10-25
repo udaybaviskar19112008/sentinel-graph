@@ -119,6 +119,16 @@ class Settings(BaseSettings):
     MAX_ATTACHMENT_BYTES: int = Field(default=2 * 1024 * 1024, gt=0)
     MIME_MAX_DEPTH: int = Field(default=32, gt=0)
     MIME_MAX_PARTS: int = Field(default=1000, gt=0)
+    MAX_EXTRACTED_URLS: int = Field(default=500, gt=0)
+
+    SANDBOX_TIMEOUT_MS: int = Field(default=4000, gt=0)
+    # Phishing kits cloak behind benign pages when they see "HeadlessChrome".
+    SANDBOX_USER_AGENT: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+    )
+    # Chromium's own OS-level sandbox. Disable only where it cannot start (e.g. root in a container).
+    SANDBOX_CHROMIUM_OS_SANDBOX: bool = True
 
     HIGH_RISK_BRAND_KEYWORDS: frozenset[str] = DEFAULT_HIGH_RISK_BRANDS
     BRAND_CANONICAL_DOMAINS: dict[str, frozenset[str]] = Field(

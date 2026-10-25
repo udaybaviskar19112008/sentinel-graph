@@ -5,7 +5,6 @@ MTA of that hop, so everything below our boundary is only as trustworthy as the
 sender: forged hops are exactly what these checks look for.
 """
 
-import ipaddress
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,10 +14,9 @@ from itertools import accumulate, pairwise
 from typing import Final, TypedDict
 
 from src.core.logger import get_logger
+from src.core.network import IPAddress, is_bogon, parse_ip
 
 logger = get_logger(__name__)
-
-IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 CLOCK_SKEW_TOLERANCE: Final = timedelta(seconds=60)
 
@@ -70,16 +68,6 @@ class _Hop:
     timestamp: datetime | None
 
 
-def _parse_ip(text: str) -> IPAddress | None:
-    try:
-        ip = ipaddress.ip_address(text)
-    except ValueError:
-        return None
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        return ip.ipv4_mapped
-    return ip
-
-
 def _hop_ip(received: str) -> IPAddress | None:
     """Connecting IP of a hop: the MTA's parenthesised TCP-info beats the client's HELO."""
     match = _FROM_CLAUSE_RE.match(received[:_MAX_RECEIVED_CHARS])
@@ -89,7 +77,7 @@ def _hop_ip(received: str) -> IPAddress | None:
     depth = list(accumulate((1 if c == "(" else -1 if c == ")" else 0 for c in clause), initial=0))
     outside: list[IPAddress] = []
     for candidate in _IP_RE.finditer(clause):
-        ip = _parse_ip(candidate["v4"] or candidate["v6"])
+        ip = parse_ip(candidate["v4"] or candidate["v6"])
         if ip is None:
             continue
         if depth[candidate.start()] > 0:
@@ -123,23 +111,17 @@ def _hops(msg: EmailMessage) -> list[_Hop]:
     ]
 
 
-def _is_bogon(ip: IPAddress) -> bool:
-    # is_global excludes RFC 1918, loopback, link-local, CGNAT, ULA, documentation and
-    # reserved space, but counts multicast as global.
-    return not ip.is_global or ip.is_multicast
-
-
 def _leaked_hops(hops: list[_Hop]) -> list[_Hop]:
     """Bogon hops strictly between the first and last public hop.
 
     Private hops before the first public one (LAN submission) or after the last
     (our own internal delivery) are normal.
     """
-    public = [i for i, hop in enumerate(hops) if hop.ip is not None and not _is_bogon(hop.ip)]
+    public = [i for i, hop in enumerate(hops) if hop.ip is not None and not is_bogon(hop.ip)]
     if len(public) < 2:
         return []
     return [
-        hop for hop in hops[public[0] + 1 : public[-1]] if hop.ip is not None and _is_bogon(hop.ip)
+        hop for hop in hops[public[0] + 1 : public[-1]] if hop.ip is not None and is_bogon(hop.ip)
     ]
 
 
