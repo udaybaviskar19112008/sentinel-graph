@@ -92,6 +92,7 @@ export type TelemetryEvent = EventBase &
         contributions: ShapContribution[]
         model_status: ModelStatus
         graph_layout: GraphLayout
+        scan_id: number | null // history record id; null if it was not saved
       }
   )
 
@@ -125,6 +126,7 @@ export type SocketStatus = 'disconnected' | 'connecting' | 'connected'
 /** The rest of the COMPLETE event, kept beside the assessment itself. */
 export interface AnalysisDetails {
   analysisId: string
+  scanId: number | null
   verdict: VerdictLevel
   riskProbability: number
   contributions: ShapContribution[]

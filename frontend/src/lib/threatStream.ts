@@ -63,6 +63,7 @@ export function applyServerMessage(message: ServerMessage): void {
       const { nodes, edges } = toFlowElements(message.graph_layout)
       store.setAssessment(message.assessment, nodes, edges, {
         analysisId: message.analysis_id,
+        scanId: message.scan_id,
         verdict: message.verdict,
         riskProbability: message.risk_probability,
         contributions: message.contributions,

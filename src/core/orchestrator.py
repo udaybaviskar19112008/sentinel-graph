@@ -10,7 +10,8 @@ import asyncio
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from contextlib import aclosing
+from contextlib import aclosing, suppress
+from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Final, Protocol
@@ -20,6 +21,7 @@ from fastapi import WebSocket
 from fastapi.concurrency import run_in_threadpool
 from numpy import float64
 from numpy.typing import NDArray
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.cognitive.prompt_engineer import build_soc_prompt
 from src.cognitive.slm_inference import CognitiveSLM, extract_verdict
@@ -31,6 +33,7 @@ from src.forensics.auth_analyzer import analyze_identity
 from src.forensics.route_analyzer import RoutingFindings, analyze_routing
 from src.fusion.meta_scorer import FusionMetaModel
 from src.fusion.xai_engine import Contribution, extract_shap_contributions
+from src.models.db_models import EmailScanRecord, ExtractedIndicator, IndicatorType
 from src.schemas import HeaderForensics, ThreatAssessment, TopologyForensics, VerdictLevel, VisionForensics
 from src.topology.graph_builder import GraphLayout, build_email_dag, describe_email_dag
 from src.topology.memae_model import GraphMemAE
@@ -42,6 +45,7 @@ logger = get_logger(__name__)
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
 _EMPTY_TRACE: Final = "The reasoning model produced no output; verdict defaulted to SUSPICIOUS."
+_MAX_SENDER_CHARS: Final = 512  # EmailScanRecord.sender column width
 
 
 class TelemetrySink(Protocol):
@@ -95,6 +99,7 @@ class _ProtocolFindings:
     routing: RoutingFindings
     urls: list[str]
     payload_text: str
+    sender: str | None  # the decoded From header, as the recipient saw it
 
 
 def _protocol_forensics(raw_bytes: bytes, brands: frozenset[str]) -> _ProtocolFindings:
@@ -103,7 +108,60 @@ def _protocol_forensics(raw_bytes: bytes, brands: frozenset[str]) -> _ProtocolFi
     routing = analyze_routing(message)
     urls = extract_urls(html, text)
     payload_text = text if text.strip() else BeautifulSoup(html, "html.parser").get_text(" ")
-    return _ProtocolFindings(HeaderForensics(**identity, **routing), routing, urls, payload_text)
+    sender = message.get("From")
+    return _ProtocolFindings(
+        HeaderForensics(**identity, **routing),
+        routing,
+        urls,
+        payload_text,
+        None if sender is None else str(sender)[:_MAX_SENDER_CHARS],
+    )
+
+
+def _indicators(findings: _ProtocolFindings) -> list[ExtractedIndicator]:
+    """Each distinct IP, URL and sender-side domain once, in the order they were found."""
+    header = findings.header
+    values: dict[tuple[IndicatorType, str], None] = {}
+    for ip in header.extracted_ips:
+        values[(IndicatorType.IP, ip)] = None
+    for url in findings.urls:
+        values[(IndicatorType.URL, url)] = None
+    for domain in (header.from_domain, header.reply_to_domain, header.return_path_domain):
+        if domain:
+            values[(IndicatorType.DOMAIN, domain)] = None
+    return [ExtractedIndicator(type=kind, value=value) for kind, value in values]
+
+
+async def _save_scan(
+    db_session: AsyncSession, findings: _ProtocolFindings, assessment: ThreatAssessment, verdict: VerdictLevel
+) -> int | None:
+    """Persist the scan and its indicators; return its id, or None if the database failed.
+
+    A database fault is logged and rolled back, never raised: the analyst still gets
+    the verdict even when history cannot be written.
+    """
+    record = EmailScanRecord(
+        timestamp=datetime.now(UTC),
+        subject=assessment.header_forensics.subject,
+        sender=findings.sender,
+        final_verdict=verdict,
+        overall_risk=assessment.overall_risk,
+        analyst_trace=assessment.analyst_trace,
+        indicators=_indicators(findings),
+    )
+    try:
+        db_session.add(record)
+        await db_session.commit()
+    except Exception:
+        with suppress(Exception):  # a broken connection can fail the rollback too
+            await db_session.rollback()
+        logger.exception("Scan could not be saved to history", extra={"event": "history.save_failed"})
+        return None
+    logger.info(
+        "Scan saved to history",
+        extra={"event": "history.saved", "scan_id": record.id, "indicators": len(record.indicators)},
+    )
+    return record.id
 
 
 async def _vision_branch(urls: list[str], engines: AnalysisEngines, emit: Emit) -> VisionForensics | None:
@@ -152,12 +210,14 @@ async def stream_analysis_pipeline(
     manager: TelemetrySink,
     *,
     engines: AnalysisEngines | None = None,
+    db_session: AsyncSession | None = None,
 ) -> ThreatAssessment:
     """Run every tier on ``raw_bytes``, streaming telemetry to ``websocket``; return the assessment.
 
     Every event carries ``analysis_id`` (also the log correlation id) and ``elapsed_ms``.
     The last one is ``{"phase": "COMPLETE", ...}`` with the assessment, verdict, SHAP
-    contributions and which engines are placeholders.
+    contributions, which engines are placeholders, and ``scan_id``: the history record,
+    when ``db_session`` is given and the save succeeded (otherwise null).
     """
     if engines is None:
         engines = await run_in_threadpool(default_engines)
@@ -212,6 +272,7 @@ async def stream_analysis_pipeline(
             overall_risk=round(risk * 100),
             analyst_trace=trace or _EMPTY_TRACE,
         )
+        scan_id = None if db_session is None else await _save_scan(db_session, findings, assessment, verdict)
         await emit(
             {
                 "phase": "COMPLETE",
@@ -221,6 +282,7 @@ async def stream_analysis_pipeline(
                 "contributions": contributions,
                 "model_status": engines.model_status,
                 "graph_layout": graph_layout,
+                "scan_id": scan_id,
             }
         )
         logger.info(

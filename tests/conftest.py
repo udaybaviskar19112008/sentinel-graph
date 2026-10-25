@@ -1,4 +1,5 @@
 import dataclasses
+from collections.abc import Iterator
 
 import pytest
 from torch_geometric.data import Data
@@ -17,6 +18,17 @@ THREE_HOP_ROUTE = RoutingFindings(
     route_hop_count=3, private_ip_leak=False, timestamp_regression_flag=False, extracted_ips=()
 )
 TWO_URLS = ["https://login.evil.example/verify", "https://cdn.evil.example/x7Qz9kP2"]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_database(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """Scan history goes to a throwaway SQLite file, never the project's soc_intel.db."""
+    database = tmp_path_factory.mktemp("history") / "soc_test.db"
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("SOC_DATABASE_URL", f"sqlite+aiosqlite:///{database.as_posix()}")
+        get_settings.cache_clear()
+        yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

@@ -228,7 +228,8 @@ All settings are environment variables with the `SOC_` prefix (or a `.env` file)
 | `SOC_MODELS_DIR` | `./models` | Where every engine loads (or generates) its model |
 | `SOC_LOG_DIR` | `./logs` | NDJSON log for SIEM ingestion (`system.log`) |
 | `SOC_TRUSTED_AUTHSERV_IDS` | `[]` | Your MX's authserv-id(s); set this in production |
-| `SOC_CORS_ALLOW_ORIGINS` | `["*"]` | Browser origins allowed to call the API |
+| `SOC_CORS_ALLOW_ORIGINS` | the Vite dev origins (`:5173`) | Browser origins allowed to call the API and stream (`["*"]` allows any) |
+| `SOC_DATABASE_URL` | `sqlite+aiosqlite:///<project>/soc_intel.db` | Scan history database |
 | `SOC_SANDBOX_TIMEOUT_MS` | `4000` | Navigation budget per detonation |
 | `SOC_SANDBOX_CHROMIUM_OS_SANDBOX` | `true` | Disable only where Chromium's sandbox cannot start |
 | `SOC_MAX_EMAIL_BYTES` | `16777216` | Largest email the API accepts |

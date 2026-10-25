@@ -114,7 +114,15 @@ def _stream(client: TestClient, raw_email: bytes) -> tuple[list[dict[str, Any]],
                 return events, event
 
 
+def _history(client: TestClient) -> list[dict[str, Any]]:
+    response = client.get("/api/v1/history/scans", params={"limit": 200})
+    assert response.status_code == 200
+    scans: list[dict[str, Any]] = response.json()
+    return scans
+
+
 def test_websocket_phishing_detonation(client: TestClient) -> None:
+    before = _history(client)
     events, final_payload = _stream(client, PHISHING_EML)
 
     phases = [event["phase"] for event in events]
@@ -143,6 +151,24 @@ def test_websocket_phishing_detonation(client: TestClient) -> None:
     assert assessment.analyst_trace.strip()
     assert final_payload["verdict"] in {"BENIGN", "SUSPICIOUS", "PHISHING", "CRITICAL"}
     assert final_payload["contributions"], "SHAP attribution missing"
+    # The scan is in the history API exactly once, matching what was streamed. (The suite
+    # shares one test database, so this checks the *new* rows rather than a total of 1.)
+    after = _history(client)
+    assert len(after) == len(before) + 1
+    saved = after[0]
+    assert saved["id"] == final_payload["scan_id"]
+    assert saved["overall_risk"] == assessment.overall_risk
+    assert saved["analyst_trace"] == assessment.analyst_trace
+    assert saved["final_verdict"] == final_payload["verdict"]
+    assert saved["subject"] == "Your Apple ID has been locked"
+    assert "security@apple-id-support.invalid" in saved["sender"]
+    saved_indicators = {(i["type"], i["value"]) for i in saved["indicators"]}
+    assert {("IP", ip) for ip in header.extracted_ips} <= saved_indicators
+    assert ("URL", "https://secure-apple-id.invalid/login") in saved_indicators
+    # And the campaign pivot finds it from its sender IP and its lure URL.
+    for indicator in ("185.220.101.4", "https://secure-apple-id.invalid/login"):
+        pivot = client.get(f"/api/v1/history/indicators/{indicator}").json()
+        assert saved["id"] in [scan["id"] for scan in pivot], indicator
     # Every engine came up as a placeholder; the payload must say so to the analyst.
     assert final_payload["model_status"] == {
         "vision_placeholder": True,

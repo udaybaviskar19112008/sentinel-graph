@@ -1,16 +1,22 @@
 import dataclasses
 import hashlib
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from fastapi import WebSocket
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from src.cognitive.slm_inference import DUMMY_REASONING
+from src.core.database import init_db, make_engine
 from src.core.logger import LOG_FILE_NAME, configure_logging, shutdown_logging
 from src.core.orchestrator import AnalysisEngines, stream_analysis_pipeline
+from src.models.db_models import EmailScanRecord, IndicatorType
 from src.schemas import ThreatAssessment
 from tests.factories import LURE_URL, StubSandbox, noise_png, phishing_email
 
@@ -159,3 +165,70 @@ async def test_threadpool_work_logs_under_the_analysis_id(engines: AnalysisEngin
     for event in ("mime.unpacked", "auth.identity_analyzed", "route.analyzed", "analysis.complete"):
         (record,) = [r for r in records if r.get("event") == event]
         assert record["correlation_id"] == analysis_id, event
+
+
+# --- scan history ---------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def db_session() -> AsyncIterator[AsyncSession]:
+    engine = make_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+    await init_db(engine)
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        yield session
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_completed_scan_is_saved_with_its_indicators(engines: AnalysisEngines, db_session: AsyncSession) -> None:
+    sink = RecordingSink()
+    assessment = await stream_analysis_pipeline(phishing_email(), SOCKET, sink, engines=engines, db_session=db_session)
+
+    complete = sink.events[-1]
+    record = (await db_session.execute(select(EmailScanRecord))).scalar_one()
+    assert complete["scan_id"] == record.id
+    assert record.subject == "Your Apple ID is locked"
+    assert record.sender is not None and "hacker@evil.com" in record.sender
+    assert record.final_verdict == complete["verdict"]
+    assert (record.overall_risk, record.analyst_trace) == (assessment.overall_risk, assessment.analyst_trace)
+    assert [(i.type, i.value) for i in record.indicators] == [
+        (IndicatorType.IP, "185.220.101.4"),
+        (IndicatorType.IP, "10.0.0.1"),
+        (IndicatorType.IP, "40.107.22.55"),
+        (IndicatorType.URL, LURE_URL),
+        (IndicatorType.DOMAIN, "evil.com"),
+    ]
+
+
+class _BrokenSession:
+    """Fails every commit, as a locked or unreachable database would."""
+
+    def __init__(self) -> None:
+        self.rolled_back = False
+
+    def add(self, record: object) -> None:
+        pass
+
+    async def commit(self) -> None:
+        raise RuntimeError("database is locked")
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+
+@pytest.mark.asyncio
+async def test_database_failure_still_delivers_the_verdict(engines: AnalysisEngines) -> None:
+    sink, broken = RecordingSink(), _BrokenSession()
+
+    await stream_analysis_pipeline(phishing_email(), SOCKET, sink, engines=engines, db_session=broken)  # type: ignore[arg-type]
+
+    assert sink.events[-1]["phase"] == "COMPLETE"
+    assert sink.events[-1]["scan_id"] is None
+    assert broken.rolled_back
+
+
+@pytest.mark.asyncio
+async def test_no_session_means_no_history(engines: AnalysisEngines) -> None:
+    _, sink = await _run(engines)
+
+    assert sink.events[-1]["scan_id"] is None

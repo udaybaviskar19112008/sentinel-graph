@@ -127,7 +127,9 @@ class Settings(BaseSettings):
     MAX_EMAIL_BYTES: int = Field(default=16 * 1024 * 1024, gt=0)
     # Browser origins allowed to call the API. CORS does not cover WebSockets, so the
     # stream endpoint checks the Origin header against this list itself; "*" allows any.
-    CORS_ALLOW_ORIGINS: list[str] = ["*"]
+    # Defaults to the Vite dashboard only: the history API serves subjects, senders and
+    # analyst traces, which any other page open in the analyst's browser could otherwise read.
+    CORS_ALLOW_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     # Ample for the prompt's 40-word deduction plus verdict, and a hard stop on a rambling model.
     SLM_MAX_NEW_TOKENS: int = Field(default=160, gt=0)
     # The MemAE decoder is dense (N x N), so graph size must stay bounded whatever the email claims.

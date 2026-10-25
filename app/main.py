@@ -12,11 +12,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from typing import Any, Final
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.routers import history
 from src.core.config import get_settings
+from src.core.database import close_db, get_db_session, init_db
 from src.core.logger import configure_logging, get_logger, shutdown_logging
 from src.core.orchestrator import AnalysisEngines, stream_analysis_pipeline
 
@@ -82,9 +85,12 @@ def create_app(engines: AnalysisEngines | None = None) -> FastAPI:
             configure_logging()
         # Model loading is blocking (ONNX sessions, torch); keep the loop free while it runs.
         app.state.engines = engines if engines is not None else await run_in_threadpool(AnalysisEngines.load)
+        # The engine is created (and later disposed) on this app's own event loop.
+        await init_db()
         try:
             yield
         finally:
+            await close_db()
             if owns_logging:
                 shutdown_logging()
 
@@ -93,6 +99,7 @@ def create_app(engines: AnalysisEngines | None = None) -> FastAPI:
         CORSMiddleware, allow_origins=settings.CORS_ALLOW_ORIGINS, allow_methods=["*"], allow_headers=["*"]
     )
     app.state.manager = manager
+    app.include_router(history.router)
 
     @app.get("/api/v1/health")
     async def health() -> dict[str, Any]:
@@ -100,7 +107,7 @@ def create_app(engines: AnalysisEngines | None = None) -> FastAPI:
         return {"status": "ok", "models": engines_.model_status, "active_streams": len(manager.active_connections)}
 
     @app.websocket(STREAM_PATH)
-    async def stream_analysis(websocket: WebSocket) -> None:
+    async def stream_analysis(websocket: WebSocket, db_session: AsyncSession = Depends(get_db_session)) -> None:
         current = get_settings()
         if not _origin_allowed(websocket.headers.get("origin"), current.CORS_ALLOW_ORIGINS):
             logger.warning(
@@ -112,7 +119,9 @@ def create_app(engines: AnalysisEngines | None = None) -> FastAPI:
         await manager.connect(websocket)
         try:
             raw_bytes = await _receive_email(websocket, current.MAX_EMAIL_BYTES)
-            await stream_analysis_pipeline(raw_bytes, websocket, manager, engines=app.state.engines)
+            await stream_analysis_pipeline(
+                raw_bytes, websocket, manager, engines=app.state.engines, db_session=db_session
+            )
             await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
         except WebSocketDisconnect:
             logger.info("Client disconnected mid-analysis", extra={"event": "api.client_disconnected"})
