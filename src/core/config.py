@@ -1,7 +1,9 @@
 """Runtime configuration, overridable via ``SOC_``-prefixed environment variables or ``.env``."""
 
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Final, Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -24,6 +26,74 @@ DEFAULT_HIGH_RISK_BRANDS: Final[frozenset[str]] = frozenset(
         "instagram", "irs", "linkedin", "metamask", "microsoft", "netflix",
         "office365", "okta", "onedrive", "outlook", "paypal", "sharepoint",
         "steam", "ups", "usps", "wellsfargo", "whatsapp", "zoom",
+    }
+)
+
+# Registered domains each brand legitimately sends from. Consumer mailbox domains
+# (gmail.com, outlook.com, icloud.com, ...) are deliberately absent, as are tenant
+# namespaces anyone can obtain (onmicrosoft.com, amazonses.com): otherwise
+# "Apple Support <x@icloud.com>" would vouch for itself. A brand keyword with no
+# entry here is checked against "<brand>.com".
+_MICROSOFT: Final = frozenset(
+    {
+        "microsoft.com", "microsoftonline.com", "office.com", "office365.com",
+        "microsoft365.com", "azure.com", "sharepointonline.com",
+    }
+)
+_META: Final = frozenset({"facebook.com", "facebookmail.com", "meta.com", "fb.com"})
+_AMAZON: Final = frozenset(
+    {
+        "amazon.com", "amazon.co.uk", "amazon.de", "amazon.fr", "amazon.it", "amazon.es",
+        "amazon.nl", "amazon.se", "amazon.pl", "amazon.ca", "amazon.com.au", "amazon.co.jp",
+        "amazon.in", "amazon.com.br", "amazon.com.mx", "amazon.sg", "amazon.ae",
+    }
+)
+_PAYPAL: Final = frozenset(
+    {
+        "paypal.com", "paypal.co.uk", "paypal.de", "paypal.fr", "paypal.it", "paypal.es",
+        "paypal.nl", "paypal.ca", "paypal.com.au",
+    }
+)
+DEFAULT_BRAND_DOMAINS: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "adobe": frozenset({"adobe.com", "adobesign.com"}),
+        "amazon": _AMAZON,
+        "americanexpress": frozenset({"americanexpress.com", "aexp.com"}),
+        "amex": frozenset({"americanexpress.com", "aexp.com"}),
+        "apple": frozenset({"apple.com"}),
+        "bankofamerica": frozenset({"bankofamerica.com"}),
+        "binance": frozenset({"binance.com"}),
+        "chase": frozenset({"chase.com", "jpmorgan.com", "jpmchase.com"}),
+        "citibank": frozenset({"citi.com", "citibank.com", "citigroup.com"}),
+        "coinbase": frozenset({"coinbase.com"}),
+        "dhl": frozenset({"dhl.com", "dhl.de", "dhl.co.uk", "dpdhl.com"}),
+        "docusign": frozenset({"docusign.com", "docusign.net"}),
+        "dropbox": frozenset({"dropbox.com", "dropboxmail.com"}),
+        "facebook": _META,
+        "fedex": frozenset({"fedex.com"}),
+        "gmail": frozenset({"google.com"}),
+        "google": frozenset({"google.com"}),
+        "hmrc": frozenset({"hmrc.gov.uk"}),
+        "hsbc": frozenset({"hsbc.com", "hsbc.co.uk", "hsbc.com.hk"}),
+        "icloud": frozenset({"apple.com"}),
+        "instagram": _META | {"instagram.com"},
+        "irs": frozenset({"irs.gov"}),
+        "linkedin": frozenset({"linkedin.com"}),
+        "metamask": frozenset({"metamask.io"}),
+        "microsoft": _MICROSOFT,
+        "netflix": frozenset({"netflix.com"}),
+        "office365": _MICROSOFT,
+        "okta": frozenset({"okta.com"}),
+        "onedrive": _MICROSOFT,
+        "outlook": _MICROSOFT,
+        "paypal": _PAYPAL,
+        "sharepoint": _MICROSOFT,
+        "steam": frozenset({"steampowered.com", "steamcommunity.com", "valvesoftware.com"}),
+        "ups": frozenset({"ups.com"}),
+        "usps": frozenset({"usps.com", "usps.gov"}),
+        "wellsfargo": frozenset({"wellsfargo.com", "wf.com"}),
+        "whatsapp": _META | {"whatsapp.com"},
+        "zoom": frozenset({"zoom.us", "zoom.com"}),
     }
 )
 
@@ -51,6 +121,12 @@ class Settings(BaseSettings):
     MIME_MAX_PARTS: int = Field(default=1000, gt=0)
 
     HIGH_RISK_BRAND_KEYWORDS: frozenset[str] = DEFAULT_HIGH_RISK_BRANDS
+    BRAND_CANONICAL_DOMAINS: dict[str, frozenset[str]] = Field(
+        default_factory=lambda: dict(DEFAULT_BRAND_DOMAINS)
+    )
+    # authserv-ids of our own boundary MTAs. Empty: trust the topmost Authentication-Results
+    # header, which is only safe when the boundary always stamps one.
+    TRUSTED_AUTHSERV_IDS: frozenset[str] = frozenset()
 
     @model_validator(mode="before")
     @classmethod
@@ -61,10 +137,20 @@ class Settings(BaseSettings):
         base = Path(data["BASE_DIR"])
         return {**{key: base / name for key, name in _DERIVED_DIRS.items()}, **data}
 
-    @field_validator("HIGH_RISK_BRAND_KEYWORDS", mode="after")
+    @field_validator("HIGH_RISK_BRAND_KEYWORDS", "TRUSTED_AUTHSERV_IDS", mode="after")
     @classmethod
-    def _normalise_brands(cls, value: frozenset[str]) -> frozenset[str]:
-        return frozenset(brand.strip().casefold() for brand in value if brand.strip())
+    def _normalise_keywords(cls, value: frozenset[str]) -> frozenset[str]:
+        return frozenset(item.strip().casefold() for item in value if item.strip())
+
+    @field_validator("BRAND_CANONICAL_DOMAINS", mode="after")
+    @classmethod
+    def _normalise_brand_domains(
+        cls, value: dict[str, frozenset[str]]
+    ) -> dict[str, frozenset[str]]:
+        return {
+            brand.strip().casefold(): frozenset(d.strip().rstrip(".").casefold() for d in domains)
+            for brand, domains in value.items()
+        }
 
     def ensure_dirs(self) -> None:
         for directory in (self.MODELS_DIR, self.CACHE_DIR, self.LOG_DIR):

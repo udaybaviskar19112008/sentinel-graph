@@ -50,6 +50,19 @@ class HeaderForensics(_Contract):
     display_name_spoof_risk: Annotated[
         UnitScore, Field(description="Likelihood the From display name impersonates another identity.")
     ]
+    impersonated_brand: Annotated[
+        str | None, Field(description="Brand named in the display name but not owning the From domain.")
+    ] = None
+    subject: Annotated[str | None, Field(description="Decoded Subject header.")] = None
+    from_domain: Annotated[
+        str | None, Field(description="Registered domain of the From address.")
+    ] = None
+    reply_to_domain: Annotated[
+        str | None, Field(description="Registered domain of the Reply-To address.")
+    ] = None
+    return_path_domain: Annotated[
+        str | None, Field(description="Registered domain of the Return-Path (envelope sender).")
+    ] = None
 
 
 class VisionForensics(_Contract):

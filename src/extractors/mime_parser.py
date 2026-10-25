@@ -10,7 +10,6 @@ transfer-decoding, which registers base64 defects of its own). ``MessageDefect``
 is still caught wherever one could surface, so a stricter policy never crashes us.
 """
 
-import codecs
 import email.policy
 import hashlib
 import re
@@ -21,6 +20,7 @@ from email.message import EmailMessage, Message
 from email.parser import BytesParser
 from typing import Final
 
+from src.core.charsets import decode_bytes
 from src.core.config import get_settings
 from src.core.logger import get_logger
 
@@ -28,7 +28,6 @@ logger = get_logger(__name__)
 
 _PARSER: Final = BytesParser(policy=email.policy.default)
 
-_FALLBACK_CHARSETS: Final[tuple[str, ...]] = ("utf-8", "windows-1252", "iso-8859-1")
 _HTML_CONTENT_TYPES: Final[frozenset[str]] = frozenset(
     {"text/html", "text/x-amp-html", "application/xhtml+xml"}
 )
@@ -178,33 +177,19 @@ def _walk_mime_tree(
 
 
 def _decode_text(data: bytes, declared: str | None, path: str) -> str:
-    """Declared charset first, then utf-8 -> windows-1252 -> iso-8859-1, then replacement."""
-    tried: set[str] = set()
-    for charset in (declared, *_FALLBACK_CHARSETS):
-        if charset is None:
-            continue
-        try:
-            codec = codecs.lookup(charset).name
-            if codec in tried:
-                continue
-            tried.add(codec)
-            text = data.decode(codec)
-        except (LookupError, ValueError):  # unknown/non-text codec, or UnicodeDecodeError
-            continue
-        if charset is not declared:
-            # A declared charset that cannot decode the body is itself an evasion signal.
-            logger.info(
-                "Declared charset failed; decoded with fallback",
-                extra={
-                    "event": "mime.charset_fallback",
-                    "part_path": path,
-                    "declared_charset": _clip(declared),
-                    "used_charset": codec,
-                },
-            )
-        return text
-    # iso-8859-1 maps every byte, so this is only a guard against the chain being edited.
-    return data.decode("utf-8", errors="replace")
+    decoded = decode_bytes(data, declared)
+    if decoded.declared_failed:
+        # A declared charset that cannot decode the body is itself an evasion signal.
+        logger.info(
+            "Declared charset failed; decoded with fallback",
+            extra={
+                "event": "mime.charset_fallback",
+                "part_path": path,
+                "declared_charset": _clip(declared),
+                "used_charset": decoded.codec,
+            },
+        )
+    return decoded.text
 
 
 def _bounded_attachment(payload: MimePayload, limit: int) -> bytes:
