@@ -40,7 +40,12 @@ _BLOCKED_EXTENSIONS: Final = frozenset(
         ".mp4", ".webm", ".mov", ".avi", ".mkv", ".mp3", ".wav", ".ogg", ".flac",
     }
 )
-_BLOCKED_RESOURCE_TYPES: Final = frozenset({"media", "websocket", "eventsource", "manifest"})
+# Images stay allowed: the logos on a lure page are what the vision model recognises.
+_BLOCKED_RESOURCE_TYPES: Final = frozenset({"media", "font", "websocket", "eventsource", "manifest"})
+# Small /dev/shm in containers crashes Chromium; GPU is unused headless. "--no-sandbox" is
+# deliberately absent: Chromium's OS sandbox is what contains a malicious page
+# (SANDBOX_CHROMIUM_OS_SANDBOX turns it off only where it cannot start).
+_LAUNCH_ARGS: Final = ("--disable-dev-shm-usage", "--disable-gpu")
 # Browser start-up is not part of the navigation budget, but it must not hang forever either.
 _STARTUP_ALLOWANCE_S: Final = 15.0
 _MAX_LOGGED_URL_CHARS: Final = 2048
@@ -84,6 +89,7 @@ async def _capture(url: str, transport: Transport, settings: Settings, blocked: 
     async with EgressProxy() as proxy, async_playwright() as playwright:
         browser = await playwright.chromium.launch(
             headless=True,
+            args=list(_LAUNCH_ARGS),
             chromium_sandbox=settings.SANDBOX_CHROMIUM_OS_SANDBOX,
             proxy={"server": proxy.url},
         )

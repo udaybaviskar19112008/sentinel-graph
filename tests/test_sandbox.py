@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import threading
+import time
 from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -92,18 +93,23 @@ async def test_safe_url_capture_returns_1024x768_png() -> None:
         }
     )
 
+    started = time.perf_counter()
     png = await detonate_and_capture("https://example.com/", transport=web)
+    elapsed = time.perf_counter() - started
 
     assert png is not None
     assert png.startswith(PNG_SIGNATURE)
     assert _png_size(png) == (1024, 768)
+    assert elapsed < 5.0  # browser launch included
 
 
 @pytest.mark.asyncio
 async def test_javascript_off_and_dangerous_or_heavy_requests_blocked() -> None:
+    brand_font_css = b"@font-face{font-family:Brand;src:url(/brand.woff2)} h1{font-family:Brand}"
     web = FakeWeb(
         {
             "/": (200, "text/html", PHISH_PAGE.encode(), {}),
+            "/site.css": (200, "text/css", brand_font_css, {}),
             "/logo.png": (200, "image/png", TINY_PNG, {}),
             "/noscript.png": (200, "image/png", TINY_PNG, {}),
         }
@@ -112,8 +118,9 @@ async def test_javascript_off_and_dangerous_or_heavy_requests_blocked() -> None:
     assert await detonate_and_capture("https://example.com/", transport=web) is not None
 
     # <noscript> content only loads when scripting is disabled; the fetch() never runs.
+    # Images still load (logos are the vision model's evidence); web fonts do not.
     assert {"/", "/logo.png", "/site.css", "/noscript.png"} <= web.paths
-    assert not {"/payload.zip", "/plugin.dll", "/clip.mp4", "/beacon"} & web.paths
+    assert not {"/payload.zip", "/plugin.dll", "/clip.mp4", "/beacon", "/brand.woff2"} & web.paths
 
 
 @pytest.mark.asyncio
