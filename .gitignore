@@ -20,3 +20,6 @@ htmlcov/
 .venv/
 venv/
 .env
+
+# Training corpora (large, licensed separately)
+data/

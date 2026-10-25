@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings",
     "fastapi",
     "uvicorn",
+    "websockets",  # uvicorn's WebSocket protocol implementation
     "tldextract",
     "beautifulsoup4",
     "playwright",
@@ -24,12 +25,17 @@ dependencies = [
     # torch.onnx.export needs these to generate the placeholder vision model.
     "onnx",
     "onnxscript",
+    "scikit-learn",
+    "joblib",
+    "shap",
+    "tqdm",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-asyncio",
+    "httpx",  # fastapi.testclient
     "mypy",
 ]
 
@@ -41,6 +47,14 @@ include = ["src", "src.*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "e2e: whole-system tests through the WebSocket API (real Chromium, real engine loading; ~20 s)",
+]
+filterwarnings = [
+    # Raised inside torch/PyG on Python 3.14 when torch_geometric is imported; not our code.
+    "ignore:`torch.jit.script` is not supported in Python 3.14:FutureWarning",
+    "ignore:Failing to pass a value to the 'type_params' parameter:DeprecationWarning",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -49,7 +63,16 @@ warn_unreachable = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["onnxruntime", "onnxruntime.*"]  # ships no type information
+module = [  # no type information
+    "onnxruntime", "onnxruntime.*",
+    "onnxruntime_genai", "onnxruntime_genai.*",
+    "torch_geometric", "torch_geometric.*",
+    "networkx", "networkx.*",
+    "sklearn", "sklearn.*",
+    "joblib", "joblib.*",
+    "shap", "shap.*",
+    "tqdm", "tqdm.*",
+]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]

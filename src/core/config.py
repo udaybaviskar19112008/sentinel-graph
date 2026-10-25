@@ -120,6 +120,16 @@ class Settings(BaseSettings):
     MIME_MAX_DEPTH: int = Field(default=32, gt=0)
     MIME_MAX_PARTS: int = Field(default=1000, gt=0)
     MAX_EXTRACTED_URLS: int = Field(default=500, gt=0)
+    # Largest raw email the API accepts (uvicorn's own WebSocket frame cap is also 16 MiB).
+    MAX_EMAIL_BYTES: int = Field(default=16 * 1024 * 1024, gt=0)
+    # Browser origins allowed to call the API. CORS does not cover WebSockets, so the
+    # stream endpoint checks the Origin header against this list itself; "*" allows any.
+    CORS_ALLOW_ORIGINS: list[str] = ["*"]
+    # Ample for the prompt's 40-word deduction plus verdict, and a hard stop on a rambling model.
+    SLM_MAX_NEW_TOKENS: int = Field(default=160, gt=0)
+    # The MemAE decoder is dense (N x N), so graph size must stay bounded whatever the email claims.
+    GRAPH_MAX_HOPS: int = Field(default=64, gt=0)
+    GRAPH_MAX_URLS: int = Field(default=64, ge=0)
 
     SANDBOX_TIMEOUT_MS: int = Field(default=4000, gt=0)
     # Phishing kits cloak behind benign pages when they see "HeadlessChrome".

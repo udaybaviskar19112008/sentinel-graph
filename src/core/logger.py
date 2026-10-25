@@ -18,14 +18,12 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from pathlib import Path
 from typing import Any, Final
 
-from pydantic import BaseModel
-
 from src.core.config import get_settings
+from src.core.serialization import json_default
 
 APP_LOGGER_NAME: Final = "soc"
 LOG_FILE_NAME: Final = "system.log"
@@ -35,23 +33,6 @@ correlation_id: ContextVar[str | None] = ContextVar("soc_correlation_id", defaul
 _RESERVED_ATTRS: Final[frozenset[str]] = frozenset(
     vars(logging.LogRecord("", logging.INFO, "", 0, "", None, None))
 ) | {"message", "asctime"}
-
-
-def _json_default(value: object) -> Any:
-    if isinstance(value, BaseModel):
-        return value.model_dump(mode="json")
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, (set, frozenset)):
-        return sorted(value, key=str)
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, (bytes, bytearray, memoryview)):
-        # Never spill raw (possibly malicious) payloads into the SIEM.
-        return {"type": type(value).__name__, "length": len(value)}
-    return repr(value)
 
 
 class JsonFormatter(logging.Formatter):
@@ -92,7 +73,7 @@ class JsonFormatter(logging.Formatter):
         }
         document.update(extras)
         try:
-            return json.dumps(document, default=_json_default, separators=(",", ":"))
+            return json.dumps(document, default=json_default, separators=(",", ":"))
         except (TypeError, ValueError):
             # e.g. a circular structure in ``extra``: keep the event, degrade the extras.
             document.update({key: repr(value) for key, value in extras.items()})

@@ -2,8 +2,9 @@
 
 Every model is frozen, strict (no silent type coercion) and rejects unknown
 fields, so a verdict cannot be mutated or smuggled extra keys after it leaves
-the stage that produced it. JSON input (API / SIEM replay) may still use enum
-values such as ``"pass"``; Python callers must pass real ``AuthStatus`` members.
+the stage that produced it. The one relaxation: auth statuses also accept their
+string values (``"pass"``), so a JSON-decoded payload validates with
+``model_validate`` as well as ``model_validate_json``; unknown strings still fail.
 """
 
 from enum import StrEnum
@@ -27,6 +28,20 @@ class AuthStatus(StrEnum):
     TEMPERROR = "temperror"
 
 
+class VerdictLevel(StrEnum):
+    """Analyst verdicts, least to most severe (declaration order is the severity order)."""
+
+    BENIGN = "BENIGN"
+    SUSPICIOUS = "SUSPICIOUS"
+    PHISHING = "PHISHING"
+    CRITICAL = "CRITICAL"
+
+
+# Strict mode would demand AuthStatus instances even from a JSON-decoded dict; accepting
+# the value is still exact (an unknown string is rejected), just not type-pedantic.
+AuthResult = Annotated[AuthStatus, Field(strict=False)]
+
+
 class _Contract(BaseModel):
     model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
 
@@ -34,10 +49,10 @@ class _Contract(BaseModel):
 class HeaderForensics(_Contract):
     """Findings from the transport and authentication headers."""
 
-    spf: Annotated[AuthStatus, Field(description="SPF result for the envelope sender.")]
-    dkim: Annotated[AuthStatus, Field(description="DKIM signature verification result.")]
-    dmarc: Annotated[AuthStatus, Field(description="DMARC alignment/policy result.")]
-    arc: Annotated[AuthStatus, Field(description="ARC chain validation result.")]
+    spf: Annotated[AuthResult, Field(description="SPF result for the envelope sender.")]
+    dkim: Annotated[AuthResult, Field(description="DKIM signature verification result.")]
+    dmarc: Annotated[AuthResult, Field(description="DMARC alignment/policy result.")]
+    arc: Annotated[AuthResult, Field(description="ARC chain validation result.")]
     route_hop_count: Annotated[
         NonNegativeInt, Field(description="Number of Received hops in the delivery path.")
     ]

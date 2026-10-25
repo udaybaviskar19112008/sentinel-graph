@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* Tactical HUD layer: a 1px graphite line every 40px on both axes. */
+  .bg-cyber-grid {
+    background-image:
+      linear-gradient(to right, theme('colors.cyber-grid') 1px, transparent 1px),
+      linear-gradient(to bottom, theme('colors.cyber-grid') 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-xl border border-white/10 bg-cyber-panel backdrop-blur-lg;
+  }
+
+  /* React Flow ships light controls; restyle them for the HUD. */
+  .react-flow .react-flow__controls-button {
+    @apply border-b-white/10 bg-cyber-panel fill-white backdrop-blur-lg hover:bg-cyber-accent/20;
+  }
+  .react-flow .react-flow__attribution {
+    @apply bg-transparent;
+  }
+  .react-flow .react-flow__attribution a {
+    @apply text-white/30;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark; /* native scrollbars and form controls match the HUD */
+  }
+
+  body {
+    @apply bg-cyber-grid;
+    background-color: theme('colors.cyber-bg');
+    color: white;
+    overflow: hidden;
+  }
+}
