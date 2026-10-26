@@ -30,8 +30,12 @@ export function RiskGauge({ className }: { className?: string }) {
   const risk = useThreatStore((s) => s.assessment?.overall_risk ?? null)
   const verdict = useThreatStore((s) => s.details?.verdict ?? null)
   const modelStatus = useThreatStore((s) => s.details?.modelStatus ?? null)
+  const estimatedHops = useThreatStore((s) => s.geoCoordinates.filter((p) => p.source === 'estimated').length)
+  const totalHops = useThreatStore((s) => s.geoCoordinates.length)
   const color = ringColor(risk)
   const placeholders = modelStatus ? standIns(modelStatus) : []
+  // Globe positions hashed from the IP because no lookup answered; they are not real locations.
+  if (estimatedHops > 0) placeholders.push(`${estimatedHops}/${totalHops} hop locations on the globe`)
 
   return (
     <div className={cn('glass-panel pointer-events-auto w-52 p-4', className)}>

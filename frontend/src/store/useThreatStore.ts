@@ -1,5 +1,6 @@
 import type { Edge, Node } from 'reactflow'
 import { create } from 'zustand'
+import type { GeoPoint } from '@/lib/geoResolver'
 
 // ---------------------------------------------------------------------------
 // Backend contracts. These mirror src/schemas.py and the events streamed by
@@ -144,6 +145,7 @@ export interface ThreatState {
   details: AnalysisDetails | null
   graphNodes: Node<NodeData>[]
   graphEdges: Edge<EdgeData>[]
+  geoCoordinates: GeoPoint[] // one per relay-hop IP, sender side first
 
   setStatus: (status: SocketStatus) => void
   setPhase: (phase: string) => void
@@ -156,6 +158,7 @@ export interface ThreatState {
     edges: Edge<EdgeData>[],
     details?: AnalysisDetails,
   ) => void
+  setGeoCoordinates: (points: GeoPoint[]) => void
   resetState: () => void
 }
 
@@ -167,6 +170,7 @@ const initialScan = {
   details: null,
   graphNodes: [] as Node<NodeData>[],
   graphEdges: [] as Edge<EdgeData>[],
+  geoCoordinates: [] as GeoPoint[],
 } satisfies Partial<ThreatState>
 
 export const useThreatStore = create<ThreatState>()((set) => ({
@@ -180,6 +184,7 @@ export const useThreatStore = create<ThreatState>()((set) => ({
   setGraph: (graphNodes, graphEdges) => set({ graphNodes, graphEdges }),
   setAssessment: (assessment, graphNodes, graphEdges, details) =>
     set({ assessment, graphNodes, graphEdges, details: details ?? null, currentPhase: 'COMPLETE' }),
+  setGeoCoordinates: (geoCoordinates) => set({ geoCoordinates }),
   // Socket status is left alone: it tracks the connection, not the scan.
   resetState: () => set({ ...initialScan }),
 }))

@@ -1,3 +1,4 @@
+import { resolveIPsToCoords } from '@/lib/geoResolver'
 import { toFlowElements } from '@/lib/graphLayout'
 import { type ServerMessage, type TelemetryEvent, useThreatStore } from '@/store/useThreatStore'
 
@@ -47,6 +48,13 @@ function describe(event: TelemetryEvent): string {
   }
 }
 
+/** Geolocate the delivery route for the globe, unless a newer scan has started meanwhile. */
+async function plotRoute(analysisId: string, ips: string[]): Promise<void> {
+  const points = await resolveIPsToCoords(ips)
+  const store = useThreatStore.getState()
+  if (store.details?.analysisId === analysisId) store.setGeoCoordinates(points)
+}
+
 /** Fold one server message into the store. */
 export function applyServerMessage(message: ServerMessage): void {
   const store = useThreatStore.getState()
@@ -70,6 +78,7 @@ export function applyServerMessage(message: ServerMessage): void {
         modelStatus: message.model_status,
       })
       store.addLog(describe(message))
+      void plotRoute(message.analysis_id, message.assessment.header_forensics.extracted_ips)
       return
     }
     case 'TOPOLOGY':
