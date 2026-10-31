@@ -1,9 +1,9 @@
 import { Line, Sphere } from '@react-three/drei'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { type ReactNode, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { GeoPoint } from '@/lib/geoResolver'
-import { useThreatStore } from '@/store/useThreatStore'
+import { type SocketStatus, useThreatStore } from '@/store/useThreatStore'
 import { cyberColors } from '@/theme/colors'
 
 const GLOBE_RADIUS = 2
@@ -12,7 +12,7 @@ const ARC_SEGMENTS = 50
 const ARC_APEX = 1.1
 const MARKER_RADIUS = 0.035
 const ALERT_RISK = 50 // the classifier's own decision threshold: probability 0.5
-const SPIN_RADIANS_PER_SECOND = 0.06 // about 0.001 rad per frame at 60 fps
+const TILT = 0.35 // radians: the globe leans toward the viewer
 const ESTIMATED_COLOR = 'rgba(214, 211, 209, 0.6)' // stone-300: a stand-in position, never a risk state
 const GLOBE_COLOR = '#57534e' // stone-600
 
@@ -51,11 +51,10 @@ function arcPoints(from: GeoPoint, to: GeoPoint): THREE.Vector3[] | null {
   return new THREE.QuadraticBezierCurve3(start, control, end).getPoints(ARC_SEGMENTS)
 }
 
+/** The globe's contents: sphere, route arcs and hop markers (the camera rig moves them). */
 function ThreatGlobe() {
-  const group = useRef<THREE.Group>(null)
   const geoCoordinates = useThreatStore((s) => s.geoCoordinates)
   const alert = useThreatStore((s) => (s.assessment?.overall_risk ?? 0) > ALERT_RISK)
-  const reducedMotion = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, [])
   const arcColor = alert ? cyberColors['cyber-alert'] : cyberColors['cyber-safe']
 
   // Hop 0 -> hop 1 -> ... in delivery order; an arc is estimated if either end is.
@@ -70,12 +69,8 @@ function ThreatGlobe() {
     [geoCoordinates],
   )
 
-  useFrame((_state, delta) => {
-    if (group.current) group.current.rotation.y += delta * SPIN_RADIANS_PER_SECOND * (reducedMotion ? 0.2 : 1)
-  })
-
   return (
-    <group ref={group} rotation={[0.35, 0, 0]}>
+    <>
       <Sphere args={[GLOBE_RADIUS, 64, 64]}>
         <meshBasicMaterial color={GLOBE_COLOR} wireframe transparent opacity={0.3} depthWrite={false} />
       </Sphere>
@@ -98,18 +93,89 @@ function ThreatGlobe() {
           <meshBasicMaterial color={point.source === 'estimated' ? ESTIMATED_COLOR : arcColor} />
         </mesh>
       ))}
-    </group>
+    </>
   )
 }
 
+type Stance = 'idle' | 'analysing' | 'complete'
+
+// Spin in radians per second. An upload spins the globe up tenfold; the verdict settles it.
+// (The brief's 0.05 rad/s "faster" spin was slower than the existing 0.06 idle, so the intent sets these.)
+const SPIN: Record<Stance, number> = { idle: 0.06, analysing: 0.6, complete: 0.06 }
+const CAMERA_Z_IDLE = 12
+const CAMERA_Z_FRAMED = 7 // pushed in to frame the route once the verdict and hop locations are in
+const SMOOTHING = 2.5 // per second: exponential approach, the same at any frame rate
+
+/** What the scene should be doing; the store has no "analysing" phase, so it is derived. */
+function stanceOf(phase: string, socket: SocketStatus): Stance {
+  if (phase === 'COMPLETE') return 'complete'
+  if (phase === 'ERROR') return 'idle'
+  // IDLE while the socket connects is the moment an upload starts.
+  return phase === 'IDLE' && socket === 'disconnected' ? 'idle' : 'analysing'
+}
+
+/** The globe yaw that turns the route's centre toward the camera on +z. */
+function facingYaw(points: GeoPoint[]): number {
+  const centre = points
+    .reduce((sum, point) => sum.add(latLongToVector3(point.lat, point.lng, GLOBE_RADIUS)), new THREE.Vector3())
+    .divideScalar(points.length)
+  // Hops on opposite sides cancel out; face the first hop instead.
+  const target = centre.lengthSq() > 1e-6 ? centre : latLongToVector3(points[0].lat, points[0].lng, GLOBE_RADIUS)
+  return Math.atan2(-target.x, target.z)
+}
+
+/** Damp an angle toward a target the shortest way round. */
+function dampAngle(current: number, target: number, delta: number): number {
+  const difference = THREE.MathUtils.euclideanModulo(target - current + Math.PI, Math.PI * 2) - Math.PI
+  return current + difference * (1 - Math.exp(-SMOOTHING * delta))
+}
+
 /**
- * Full-screen wireframe Earth with the delivery route drawn hop to hop: cyan, or red above
- * risk 75. Dashed white arcs touch a hop whose location is a hashed stand-in, not a lookup.
+ * State-driven cinematography: the globe spins up while an email is analysed; when the
+ * verdict and hop locations arrive the camera pushes in and the route turns to face it;
+ * idle, both settle back. It reads the store inside the frame loop, so phase changes never
+ * re-render React. Reduced motion: a slow spin and an instant camera.
+ */
+function CameraRig({ children }: { children: ReactNode }) {
+  const spinning = useRef<THREE.Group>(null)
+  const spin = useRef(SPIN.idle)
+  const reducedMotion = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, [])
+
+  useFrame((state, delta) => {
+    const { currentPhase, socketStatus, geoCoordinates } = useThreatStore.getState()
+    const stance = stanceOf(currentPhase, socketStatus)
+    const framing = stance === 'complete' && geoCoordinates.length > 0
+
+    spin.current = THREE.MathUtils.damp(spin.current, SPIN[stance] * (reducedMotion ? 0.2 : 1), SMOOTHING, delta)
+    const group = spinning.current
+    if (group) {
+      if (framing) {
+        const yaw = facingYaw(geoCoordinates)
+        group.rotation.y = reducedMotion ? yaw : dampAngle(group.rotation.y, yaw, delta)
+      } else {
+        group.rotation.y += spin.current * delta
+      }
+    }
+
+    const z = framing ? CAMERA_Z_FRAMED : CAMERA_Z_IDLE
+    state.camera.position.z = reducedMotion ? z : THREE.MathUtils.damp(state.camera.position.z, z, SMOOTHING, delta)
+  })
+  return <group ref={spinning}>{children}</group>
+}
+
+/**
+ * Full-screen wireframe Earth with the delivery route drawn hop to hop: rose above risk 50,
+ * emerald below. Dashed stone arcs touch a hop whose location is a hashed stand-in, not a lookup.
  */
 export default function CyberCanvas() {
   return (
-    <Canvas camera={{ position: [0, 0, 6], fov: 55 }} dpr={[1, 2]} gl={{ alpha: true }} fallback={null}>
-      <ThreatGlobe />
+    <Canvas camera={{ position: [0, 0, CAMERA_Z_IDLE], fov: 55 }} dpr={[1, 2]} gl={{ alpha: true }} fallback={null}>
+      {/* Tilt outside the spin, so the globe turns about its own tilted axis instead of wobbling. */}
+      <group rotation={[TILT, 0, 0]}>
+        <CameraRig>
+          <ThreatGlobe />
+        </CameraRig>
+      </group>
     </Canvas>
   )
 }
