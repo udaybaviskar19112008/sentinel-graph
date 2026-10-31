@@ -16,7 +16,7 @@
 | Spam precision / recall @ 0.5 · Ham precision / recall | 0.634 / 0.477 · 0.902 / 0.946 |
 | MemAE | GCN 5→32→16 · memory 50×16 · τ = 0.1 · λ = 0.05 · zero-day threshold 0.913 (99th pct. OOF benign) |
 | Latency (laptop CPU) | Tier 1 ≈ 60 ms · topology ≈ 90 ms · detonation ≈ 2.5 s · full assessment ≈ 4 s |
-| Tests | 241 automated tests, including whole-system WebSocket runs |
+| Tests | 306 automated tests, including whole-system WebSocket runs |
 | Trained engines | MemAE, fusion meta-model |
 | Stand-ins (flagged in every API response) | Vision model, SLM |
 
@@ -97,11 +97,11 @@
 **On the slide**
 - **FastAPI WebSocket:** one email per connection, a telemetry event at every step
 - Vision and topology run **concurrently** — topology finishes (~90 ms) while the sandbox is still rendering
-- **React 19 + Zustand** store · **React Flow** delivery map · **Three.js** particle sphere
+- **React 19 + Zustand** store · **React Flow** delivery map · **Three.js** globe with hop-to-hop arcs · **History** page
 - Edges coloured by the **sign of their SHAP impact** · risk gauge · live reasoning terminal
 - Stand-in models are **labelled on screen** — a placeholder score is never shown as evidence
 
-> **Speaker Notes:** The analyst drops an email onto the dashboard. The backend streams an event for every step — protocol forensics, the delivery graph, the detonation, each reasoning token — so the screen fills in as the analysis happens rather than after a spinner. The vision and topology branches run in parallel; in the live system the graph is scored in about ninety milliseconds while the browser is still loading the page. The map colours each edge by whether its subsystem's SHAP contribution pushed the risk up, and the sphere in the background turns red and speeds up above a risk of seventy-five. One design decision I want to point out: whenever an engine is running a stand-in model, the dashboard says so next to the score. A security tool must never present a placeholder number as evidence.
+> **Speaker Notes:** The analyst drops an email onto the dashboard. The backend streams an event for every step — protocol forensics, the delivery graph, the detonation, each reasoning token — so the screen fills in as the analysis happens rather than after a spinner. The vision and topology branches run in parallel; in the live system the graph is scored in about ninety milliseconds while the browser is still loading the page. The map colours each edge by whether its subsystem's SHAP contribution pushed the risk up, and the globe in the background draws the delivery route hop by hop, in red above a risk of seventy-five; any hop that could not be geolocated is drawn dashed and counted as an estimate. One design decision I want to point out: whenever an engine is running a stand-in model, the dashboard says so next to the score. A security tool must never present a placeholder number as evidence.
 
 *(Optional 60-second live demo here: drop an `.eml`, narrate the telemetry, point at the edge colours and the SHAP-backed gauge.)*
 
@@ -138,7 +138,7 @@
 
 ### Q1. "Why use a complex MemAE GNN when standard Random Forests or SVMs exist?"
 
-> **Answer:** I do use a Random Forest — it is the fusion model at the top of the system. The two answer different questions. A Random Forest or an SVM is supervised: it needs labelled attacks and learns the patterns those attacks had. The MemAE is unsupervised: it trains on legitimate mail alone and asks only "does this delivery route look like anything normal I have seen?" That is how it can flag a routing trick no one has labelled yet. A flat classifier also cannot see structure. A route is a sequence of connected hops, and the graph convolution lets each hop's representation depend on its neighbours. The memory addresses the classic weakness of autoencoders: without it, the network would learn to reconstruct anomalies too. So the GNN finds the novel; the forest weighs it against everything else. In our SHAP attributions the MemAE loss was the second-largest contributor, about thirty percent, on the example I demonstrated.
+> **Answer:** I do use a Random Forest — it is the fusion model at the top of the system. The two answer different questions. A Random Forest or an SVM is supervised: it needs labelled attacks and learns the patterns those attacks had. The MemAE is unsupervised: it trains on legitimate mail alone and asks only "does this delivery route look like anything normal I have seen?" That is how it can flag a routing trick no one has labelled yet. A flat classifier also cannot see structure. A route is a sequence of connected hops, and the graph convolution lets each hop's representation depend on its neighbours. The memory addresses the classic weakness of autoencoders: without it, the network would learn to reconstruct anomalies too. So the GNN finds the novel; the forest weighs it against everything else. One honest limit: route nodes currently carry only their position, so the trained MemAE models route shape rather than forged hops — on the demo lure its loss is 0.0003 and its SHAP share 11.5%. Per-hop node attributes are the fix; see `CAPSTONE_DEFENSE.md`.
 
 ### Q2. "How do you handle the severe latency of spawning a headless browser for every email in a production environment?"
 

@@ -19,6 +19,8 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   server: {
+    // Cloudflare quick tunnels (`cloudflared tunnel --url http://localhost:5173`) arrive with this Host.
+    allowedHosts: ['.trycloudflare.com'],
     proxy: {
       '/api': { target: `http://${BACKEND}`, changeOrigin: true },
       // Analysis stream: /ws/api/v1/stream-analysis
