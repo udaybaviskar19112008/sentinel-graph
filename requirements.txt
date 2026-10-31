@@ -1,0 +1,43 @@
+# Pinned runtime + test dependencies for Sentinel-Graph (Python 3.12+).
+# Mirrors pyproject.toml [project.dependencies] and [dev]; versions are the ones
+# the 371-test suite and the deployed models were verified against.
+# Install: python -m pip install -r requirements.txt
+#
+# Linux note: the default PyPI torch wheel bundles CUDA (~2 GB). For CPU only, use
+#   python -m pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- API / persistence ---
+fastapi==0.162.0
+uvicorn==0.40.0
+websockets==16.0          # uvicorn's WebSocket protocol implementation
+pydantic==2.13.4
+pydantic-settings==2.14.2
+sqlalchemy==2.0.51
+aiosqlite==0.22.1
+requests==2.34.2
+
+# --- Forensics / sandbox ---
+beautifulsoup4==4.15.0
+tldextract==5.4.0
+playwright==1.64.1        # browsers: python -m playwright install chromium
+
+# --- ML ---
+torch==2.15.0
+torch-geometric==2.8.1
+networkx==3.6.1
+onnxruntime==1.31.1
+onnx==1.23.2              # torch.onnx.export (placeholder vision model)
+onnxscript==0.7.2
+numpy==2.4.6
+pillow==12.3.0
+scikit-learn==1.9.0
+joblib==1.5.3
+shap==0.54.1
+matplotlib==3.11.0        # training plots
+tqdm==4.68.2
+
+# --- Tests / type checking ---
+pytest==9.0.3
+pytest-asyncio==1.4.1
+httpx==0.28.1             # fastapi.testclient
+mypy==1.20.2

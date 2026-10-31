@@ -20,6 +20,32 @@ Developed by **Uday Babasaheb Baviskar** · JSPM Jayawantrao Sawant College of E
 
 ---
 
+## 🚀 Quick Start (Fresh Clone)
+
+Needs Python 3.12+, Node.js 20+ and git. From the repository root, run the setup script once (pip packages, Playwright Chromium, frontend `node_modules`):
+
+```bat
+setup.bat
+```
+
+```bash
+bash setup.sh
+```
+
+(`setup.bat` on Windows, `bash setup.sh` on macOS/Linux.) Then start the two halves in two terminals:
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+```bash
+cd frontend && npm run dev
+```
+
+Open **http://localhost:5173** and drop one of the `.eml` files from `samples/`. Trained weights are not in git (`models/` is ignored), so a fresh clone starts with clearly-flagged placeholder models; see [Training](#-training-the-models) to build the real ones.
+
+---
+
 Sentinel-Graph analyses a raw email (`.eml`) the way a Security Operations Centre analyst would, but in seconds: it verifies the sender cryptographically, models the delivery route as a graph and scores it for anomalies, detonates the lure in a sandboxed browser, asks a **local** language model to reason about the evidence, fuses everything into one risk score, and **explains that score feature by feature** with SHAP. Every step streams live to a WebGL dashboard over a WebSocket; every verdict is saved with its indicators (IPs, URLs, sender domains) so an analyst can pivot from one indicator to every scan that saw it, and the delivery route is drawn hop by hop on a 3D globe.
 
 > [!IMPORTANT]
