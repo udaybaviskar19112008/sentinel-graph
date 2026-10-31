@@ -16,11 +16,12 @@
 | Phishing precision / recall / F1 @ 0.5 · Legitimate precision / recall | 0.779 / 0.898 / 0.834 · 0.937 / 0.857 |
 | Out-of-time: 1,000 unseen 2023–25 phishing | **61.4%** caught @ 0.5 (10-feature model: 48.8% · 2002 baseline: 41.1%) |
 | Content-feature ablation (identical folds, identical MemAE) | 10 → 12 features: OOF ROC-AUC 0.926 → 0.953 |
+| Drop-column ablation (OOF AUC · 2023–25 recall) | baseline 0.953 · 61.4% · no MemAE loss **0.953 · 71.6%** · no DGA 0.935 · 50.5% · no NLP 0.950 · 57.2% · no graph size + MemAE 0.936 · 37.6% · no protocol forensics 0.934 · 47.2% |
 | Demo emails | lure **61/100** (10-feature: 55) · benign **39/100** (10-feature: 29) |
 | 2002 baseline (archived) | OOF ROC-AUC 0.855, spam vs ham — a different task; not comparable with 0.953 |
 | MemAE | GCN 5→32→16 · memory 50×16 · τ = 0.1 · λ = 0.05 · zero-day threshold 1.10 (99th pct. OOF benign) · median 2 active slots per node (max 6) |
 | Latency (laptop CPU) | Tier 1 ≈ 6 ms on the demo lure (measured 2026-10-31) · topology ≈ 90 ms · detonation ≈ 2.5 s · full assessment ≈ 4 s (earlier run with a live detonation) |
-| Tests | 353 automated tests, including whole-system WebSocket runs |
+| Tests | 371 automated tests, including whole-system WebSocket runs |
 | Trained engines | MemAE, fusion meta-model |
 | Stand-ins (flagged in every API response) | Vision model, SLM |
 
@@ -144,7 +145,7 @@
 
 ### Q1. "Why use a complex MemAE GNN when standard Random Forests or SVMs exist?"
 
-> **Answer:** I do use a Random Forest — it is the fusion model at the top of the system. The two answer different questions. A Random Forest or an SVM is supervised: it needs labelled attacks and learns the patterns those attacks had. The MemAE is unsupervised: it trains on legitimate mail alone and asks only "does this delivery route look like anything normal I have seen?" That is how it can flag a routing trick no one has labelled yet. A flat classifier also cannot see structure. A route is a sequence of connected hops, and the graph convolution lets each hop's representation depend on its neighbours. The memory addresses the classic weakness of autoencoders: without it, the network would learn to reconstruct anomalies too. So the GNN finds the novel; the forest weighs it against everything else. One honest limit: route nodes currently carry only their position, so the MemAE models route shape rather than forged hops. On the demo lure the deployed model's loss is 0.194 and it pushes the risk up, with a 5.7% SHAP share; it ranks the forged route above a benign one, but because of the route's shape, not because it sees the forged hop. Per-hop node attributes are the fix; see `CAPSTONE_DEFENSE.md`.
+> **Answer:** I do use a Random Forest — it is the fusion model at the top of the system. The two answer different questions. A Random Forest or an SVM is supervised: it needs labelled attacks and learns the patterns those attacks had. The MemAE is unsupervised: it trains on legitimate mail alone and asks only "does this delivery route look like anything normal I have seen?" That is how it can flag a routing trick no one has labelled yet. A flat classifier also cannot see structure. A route is a sequence of connected hops, and the graph convolution lets each hop's representation depend on its neighbours. The memory addresses the classic weakness of autoencoders: without it, the network would learn to reconstruct anomalies too. So the GNN finds the novel; the forest weighs it against everything else. One honest limit: route nodes currently carry only their position, so the MemAE models route shape rather than forged hops. On the demo lure the deployed model's loss is 0.194 and it pushes the risk up, with a 5.7% SHAP share; it ranks the forged route above a benign one, but because of the route's shape, not because it sees the forged hop. I ran the ablation that tests this: retraining without the MemAE loss leaves the AUC at 0.953 and raises recall on unseen 2023–25 phishing from 61.4% to 71.6%, so today the topology signal is route size and the MemAE duplicates it. Per-hop node attributes are what would let it contribute; see `CAPSTONE_DEFENSE.md`.
 
 ### Q2. "How do you handle the severe latency of spawning a headless browser for every email in a production environment?"
 
@@ -162,3 +163,4 @@
 - The deployed models were trained on **2002–06 public mail** and catch **61.4%** of unseen 2023–25 phishing against 89.8% in-distribution; retraining on modern mail is the top future-work item.
 - `private_ip_leak` is **inverted** (SHAP −0.243 on the demo lure) by a mailing-list confound in the legitimate data; monotonic constraints would forbid it.
 - Results are **out-of-fold on one public corpus** plus one out-of-time phishing test, not a production trial; the false-positive rate on today's mail is unmeasured, and the one benign demo email rose from 29 to 39 with the 12-feature model.
+- **The MemAE loss adds nothing to the fusion score** (drop-column ablation: AUC 0.953 with or without it; 2023–25 recall 71.6% without it). Its current value is the zero-day flag and the route telemetry; per-hop attributes would let it contribute to the risk.

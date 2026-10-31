@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from sklearn.metrics import roc_auc_score
 
 from scripts import run_ablation_study as ablation
 from scripts import train_orchestrator as orchestrator
@@ -104,3 +105,99 @@ def test_out_of_time_refuses_legitimate_mail(corpus: Path, tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="phishing only"):
         ablation.load_out_of_time_phishing(path, corpus)
+
+
+# --- ablation core -------------------------------------------------------------------------
+
+
+def _informative_matrix(seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    """60 rows: column 2 carries the label (plus noise); every other column is noise."""
+    rng = np.random.default_rng(seed)
+    y = np.repeat([0, 1], 30).astype(np.int64)
+    X = rng.random((60, N_FEATURES))
+    X[:, 2] = y + rng.normal(0, 0.3, 60)
+    return X, y
+
+
+def test_evaluate_ablation_never_modifies_its_input() -> None:
+    X, y = _informative_matrix()
+    before = X.copy()
+
+    ablation.evaluate_ablation(X, y, [2, 10, 11])
+
+    np.testing.assert_array_equal(X, before)
+
+
+def test_removing_the_informative_feature_costs_auc() -> None:
+    X, y = _informative_matrix()
+
+    full = ablation.evaluate_ablation(X, y, [])
+    without = ablation.evaluate_ablation(X, y, [2])
+
+    assert full["roc_auc"] > 0.9 and without["roc_auc"] < full["roc_auc"] - 0.2
+    assert 0.0 <= without["f1_score"] <= 1.0 and full["out_of_time_recall"] is None
+
+
+def test_dropping_the_content_columns_retrains_the_ten_feature_model() -> None:
+    X, y = _informative_matrix(1)
+    expected = orchestrator.out_of_fold_probabilities(X[:, :10], y, orchestrator.stratified_splits(y))
+
+    result = ablation.evaluate_ablation(X, y, ablation.MODALITY_MAP["CONTENT_HEURISTICS"])
+
+    assert result["roc_auc"] == roc_auc_score(y, expected)
+
+
+def test_out_of_time_recall_comes_from_a_forest_fitted_on_every_row() -> None:
+    X, y = _informative_matrix()
+    unseen_phishing = X[y == 1][:10]
+
+    result = ablation.evaluate_ablation(X, y, [], unseen_phishing)
+
+    forest = orchestrator.make_forest().fit(X, y)
+    expected = float(np.mean(forest.predict_proba(unseen_phishing)[:, 1] >= 0.5))
+    assert result["out_of_time_recall"] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("removed", [[-1], [N_FEATURES], list(range(N_FEATURES))])
+def test_invalid_ablations_are_refused(removed: list[int]) -> None:
+    X, y = _informative_matrix()
+
+    with pytest.raises(ValueError):
+        ablation.evaluate_ablation(X, y, removed)
+
+
+def test_configurations_are_distinct_experiments_starting_with_the_baseline() -> None:
+    removed = [tuple(sorted(columns)) for columns in ablation.ABLATIONS.values()]
+
+    assert removed[0] == ()
+    assert len(set(removed)) == len(removed)  # "no content" and "legacy 10D" are one row, not two
+    assert all(0 <= index < N_FEATURES for columns in removed for index in columns)
+
+
+def test_markdown_table_has_one_row_per_configuration() -> None:
+    results = {
+        label: ablation.AblationResult(
+            roc_auc=0.95 - 0.01 * position, f1_score=0.8, precision=0.8, recall=0.8, out_of_time_recall=0.5
+        )
+        for position, label in enumerate(ablation.ABLATIONS)
+    }
+
+    table = ablation.format_markdown(results, np.array([0, 0, 1]), 1000)
+
+    rows = [line for line in table.splitlines() if line.startswith("| ") and not line.startswith("| Configuration")]
+    assert len(rows) == len(ablation.ABLATIONS)
+    assert "2023–25 phishing caught (n=1000)" in table
+    assert rows[0].split("|")[5].strip() == "—"  # the baseline degrades by nothing
+    assert rows[1].split("|")[5].strip() == f"{0.01 / 0.95 * 100:.2f}%"
+    assert "`dga_max_entropy`, `nlp_urgency_score`" in rows[1]
+
+
+def test_main_writes_the_table(corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    out = tmp_path / "ablation.md"
+
+    assert ablation.main(["--data-dir", str(corpus), "--out", str(out), "--no-out-of-time"]) == 0
+
+    table = out.read_text("utf-8")
+    table_lines = [line for line in table.splitlines() if line.startswith("| ")]
+    assert len(table_lines) == len(ablation.ABLATIONS) + 1  # header + one row per configuration
+    assert "Written to" in capsys.readouterr().out
