@@ -1,10 +1,17 @@
 import { AnimatePresence } from 'framer-motion'
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { PageTransition } from '@/components/PageTransition'
 import { useThreatSocket } from '@/hooks/useThreatSocket'
 import { LiveDetonation } from '@/pages/LiveDetonation'
+import { MLAnalysis } from '@/pages/MLAnalysis'
+import { Reports } from '@/pages/Reports'
 import { ThreatHistory } from '@/pages/ThreatHistory'
+
+function page(content: ReactNode) {
+  return <PageTransition>{content}</PageTransition>
+}
 
 /**
  * Keyed by path so AnimatePresence sees each page leave before the next one enters
@@ -15,22 +22,13 @@ function AnimatedRoutes({ onFile }: { onFile: (file: File) => void }) {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route
-          path="/"
-          element={
-            <PageTransition>
-              <LiveDetonation onFile={onFile} />
-            </PageTransition>
-          }
-        />
-        <Route
-          path="/history"
-          element={
-            <PageTransition>
-              <ThreatHistory />
-            </PageTransition>
-          }
-        />
+        <Route path="/" element={page(<LiveDetonation onFile={onFile} />)} />
+        {/* The live view stays at "/" (as the docs say); /live is an alias. */}
+        <Route path="/live" element={<Navigate to="/" replace />} />
+        <Route path="/history" element={page(<ThreatHistory />)} />
+        <Route path="/ml-forensics" element={page(<MLAnalysis />)} />
+        <Route path="/reports" element={page(<Reports />)} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>
   )

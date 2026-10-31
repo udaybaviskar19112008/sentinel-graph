@@ -1,10 +1,12 @@
-import { Database, type LucideIcon, Radar } from 'lucide-react'
+import { BrainCircuit, Database, FileDown, type LucideIcon, Radar } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
 const LINKS: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/', label: 'Live detonation', icon: Radar },
-  { to: '/history', label: 'Threat history', icon: Database },
+  { to: '/', label: 'Live scan', icon: Radar },
+  { to: '/history', label: 'History', icon: Database },
+  { to: '/ml-forensics', label: 'ML engine', icon: BrainCircuit },
+  { to: '/reports', label: 'Export', icon: FileDown },
 ]
 
 /**
@@ -12,6 +14,9 @@ const LINKS: { to: string; label: string; icon: LucideIcon }[] = [
  *
  * The rail reserves a fixed 4rem; the widening panel overlays the page instead of
  * pushing it, so the topology map does not re-layout every time the pointer passes.
+ * Every link carries a 4px right border (transparent until active), so the active
+ * marker never shifts a link's content. Focus shows as a ring: cn()'s class merging
+ * drops a bare `outline` next to `outline-1`, which left keyboard focus invisible.
  */
 export function SidebarNavigation() {
   return (
@@ -27,8 +32,8 @@ export function SidebarNavigation() {
             end
             className={({ isActive }) =>
               cn(
-                'flex h-10 items-center gap-3 rounded-lg px-2 text-stone-400 transition-colors hover:bg-glass-base hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyber-accent',
-                isActive && 'bg-cyber-accent/10 text-cyber-accent hover:text-cyber-accent',
+                'flex h-10 cursor-pointer items-center gap-3 rounded-lg border-r-4 border-transparent px-2 text-stone-400 transition-all duration-200 hover:translate-x-1 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyber-accent',
+                isActive && 'border-rose-500 bg-white/10 text-white hover:bg-white/10',
               )
             }
           >
