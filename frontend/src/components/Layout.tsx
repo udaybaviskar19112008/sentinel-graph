@@ -14,7 +14,9 @@ const CyberCanvas = lazy(() => import('@/components/CyberCanvas'))
 export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="relative h-full w-full overflow-hidden text-white">
-      <div className="absolute inset-0 z-0" aria-hidden="true">
+      {/* z-0, not -z-10: the root has no stacking context of its own, so a negative z-index
+          would paint the canvas beneath the page background. */}
+      <div className="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
         <Suspense fallback={null}>
           <CyberCanvas />
         </Suspense>

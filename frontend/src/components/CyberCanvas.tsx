@@ -11,9 +11,10 @@ const ARC_SEGMENTS = 50
 // Lowest an arc's apex may sit, as a multiple of the radius, however far apart its hops are.
 const ARC_APEX = 1.1
 const MARKER_RADIUS = 0.035
-const ALERT_RISK = 75
+const ALERT_RISK = 50 // the classifier's own decision threshold: probability 0.5
 const SPIN_RADIANS_PER_SECOND = 0.06 // about 0.001 rad per frame at 60 fps
-const ESTIMATED_COLOR = 'rgba(255, 255, 255, 0.45)'
+const ESTIMATED_COLOR = 'rgba(214, 211, 209, 0.6)' // stone-300: a stand-in position, never a risk state
+const GLOBE_COLOR = '#57534e' // stone-600
 
 /** Geographic degrees to a point on a sphere of ``radius``: +y is north, the prime meridian is +x. */
 function latLongToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
@@ -55,7 +56,7 @@ function ThreatGlobe() {
   const geoCoordinates = useThreatStore((s) => s.geoCoordinates)
   const alert = useThreatStore((s) => (s.assessment?.overall_risk ?? 0) > ALERT_RISK)
   const reducedMotion = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, [])
-  const arcColor = alert ? cyberColors['cyber-alert'] : cyberColors['cyber-accent']
+  const arcColor = alert ? cyberColors['cyber-alert'] : cyberColors['cyber-safe']
 
   // Hop 0 -> hop 1 -> ... in delivery order; an arc is estimated if either end is.
   const arcs = useMemo(
@@ -76,8 +77,7 @@ function ThreatGlobe() {
   return (
     <group ref={group} rotation={[0.35, 0, 0]}>
       <Sphere args={[GLOBE_RADIUS, 64, 64]}>
-        {/* cyber-grid (#0a111a) at 0.3 is indistinguishable from the #030508 void; a faint cyan reads as a globe. */}
-        <meshBasicMaterial color={cyberColors['cyber-accent']} wireframe transparent opacity={0.07} depthWrite={false} />
+        <meshBasicMaterial color={GLOBE_COLOR} wireframe transparent opacity={0.3} depthWrite={false} />
       </Sphere>
       {arcs.map(({ key, points, estimated }) => (
         <Line
