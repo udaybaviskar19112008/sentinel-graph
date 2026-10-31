@@ -80,7 +80,7 @@ Tier 1 runs first because every later tier needs its output (bodies, URLs, route
 | Streaming | `src/core/orchestrator.py`, `app/main.py` | The fan-out pipeline and the WebSocket API |
 | Persistence | `src/core/database.py`, `src/models/db_models.py` | Async SQLAlchemy scan records and pivotable indicators |
 | History | `src/api/routers/history.py` | Paginated scan log and indicator pivot endpoints |
-| Dashboard | `frontend/src/pages/`, `components/CyberCanvas.tsx`, `lib/geoResolver.ts` | Live and history pages, globe, hop geolocation |
+| Dashboard | `frontend/src/pages/`, `components/CyberCanvas.tsx`, `lib/geoResolver.ts`, `lib/exports.ts` | Live, history, ML forensics and reports pages; globe and hop geolocation; JSON/CSV export |
 
 **The 12-feature fusion space** — one row per email, in this order (a saved model takes its columns by name):
 
@@ -283,7 +283,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173** and drop an `.eml` file onto the dashboard. Vite proxies `/api` and `/ws` to the backend on port 8000. The sidebar switches between **Live detonation** (`/`) and **Threat history** (`/history`); a scan keeps streaming while you browse the history log.
+Open **http://localhost:5173** and drop an `.eml` file onto the dashboard. Vite proxies `/api` and `/ws` to the backend on port 8000. The sidebar switches between four pages: **Live scan** (`/`, alias `/live`), **History** (`/history`), **ML forensics** (`/ml-forensics`: every feature's value and SHAP impact, with explanations) and **Export** (`/reports`: the current assessment as JSON or CSV, the whole history as CSV). A scan keeps streaming while you browse. Exported CSV text cells that start with `=`, `+`, `-`, `@` or a tab are prefixed with an apostrophe, so attacker-controlled subjects cannot run as spreadsheet formulas.
 
 To keep every hop IP on the machine during a demo, put `VITE_GEO_LOOKUP=off` in `frontend/.env.local` before `npm run dev` (globe positions are then all estimated and labelled as such).
 
@@ -382,7 +382,7 @@ scripts/             train_orchestrator.py (lazy ingestion, cross-fitting, OOF C
                      run_ablation_study.py (drop-column ablation -> models_research/ablation_results.md)
 tests/               371 tests, including tests/e2e/
 frontend/            React 19 + Vite + Tailwind + Three.js + React Flow dashboard
-  src/pages/         LiveDetonation (/) and ThreatHistory (/history)
+  src/pages/         LiveDetonation (/), ThreatHistory (/history), MLAnalysis (/ml-forensics), Reports (/reports)
 docs/                CAPSTONE_PRESENTATION.md (12-min talk), CAPSTONE_DEFENSE.md (5-min talk + Q&A)
 ```
 

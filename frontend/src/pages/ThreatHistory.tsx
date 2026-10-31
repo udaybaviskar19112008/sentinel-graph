@@ -1,29 +1,9 @@
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { fetchScans, type Indicator, type Scan } from '@/lib/historyApi'
 import { cn } from '@/lib/utils'
 import type { VerdictLevel } from '@/store/useThreatStore'
 
-// Mirrors ScanOut / IndicatorOut in src/api/routers/history.py; change both sides together.
-type IndicatorType = 'IP' | 'URL' | 'DOMAIN'
-
-interface Indicator {
-  type: IndicatorType
-  value: string
-  malicious_flag: boolean
-}
-
-interface Scan {
-  id: number
-  timestamp: string // ISO 8601, UTC
-  subject: string | null
-  sender: string | null
-  final_verdict: VerdictLevel
-  overall_risk: number // 0-100
-  analyst_trace: string
-  indicators: Indicator[]
-}
-
-const SCANS_URL = '/api/v1/history/scans'
 const SHOWN_INDICATORS = 3
 
 const VERDICT_BADGE: Record<VerdictLevel, string> = {
@@ -39,13 +19,7 @@ function riskColor(risk: number): string {
   return 'text-cyber-safe'
 }
 
-async function fetchScans(signal: AbortSignal): Promise<Scan[]> {
-  const response = await fetch(SCANS_URL, { signal })
-  if (!response.ok) throw new Error(`History API answered ${response.status}`)
-  return (await response.json()) as Scan[]
-}
-
-const timestampFormat =new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
+const timestampFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
 
 function Indicators({ indicators }: { indicators: Indicator[] }) {
   if (indicators.length === 0) return <span className="text-stone-500">none</span>
