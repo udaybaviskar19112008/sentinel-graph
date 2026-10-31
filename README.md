@@ -42,7 +42,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 cd frontend && npm run dev
 ```
 
-Open **http://localhost:5173** and drop one of the `.eml` files from `samples/`. Trained weights are not in git (`models/` is ignored), so a fresh clone starts with clearly-flagged placeholder models; see [Training](#-training-the-models) to build the real ones.
+Open **http://localhost:5173** and drop one of the `.eml` files from `samples/`. The trained production models ship in the repository (`models/fusion_meta.joblib` — the 12-feature fusion model, OOF ROC-AUC 0.953 — and `models/topology/memae.pt`, about 670 KB in plain git, no Git LFS needed), so the samples score as documented in `samples/README.txt`. The vision and SLM engines are still stand-ins (see the model status table below).
 
 ---
 
@@ -293,7 +293,7 @@ python -m playwright install chromium
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-On first start, missing models are generated as clearly-flagged placeholders (`GET /api/v1/health` lists them). Train real ones with the next section.
+The trained fusion and MemAE models ship in `models/`. On first start, any model that is still missing (the vision model always is) is generated as a clearly-flagged placeholder (`GET /api/v1/health` lists them). Retrain with the next section.
 
 ### 2 · Frontend
 

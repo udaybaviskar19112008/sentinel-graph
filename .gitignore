@@ -1,7 +1,15 @@
 # Runtime output (see src/core/config.py)
 /logs/
 /.cache/
-/models/
+/models/*
+# ...except the trained production set (~670 KB, plain git so ZIP downloads work too).
+# The vision model is a generated placeholder and stays ignored.
+!/models/fusion_meta.joblib
+!/models/training_report.json
+!/models/topology/
+/models/topology/*
+!/models/topology/memae.pt
+!/models/topology/memae.onnx
 # Candidates and archived model sets (models_research/, models_baseline_2002/, ...)
 /models_*/
 

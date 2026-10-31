@@ -1,0 +1,162 @@
+{
+  "trained_at": "2026-10-31T16:24:23+00:00",
+  "emails": 6572,
+  "class_counts": {
+    "benign": 4211,
+    "phishing": 2361
+  },
+  "folds": 5,
+  "oof_roc_auc": 0.9534552865767447,
+  "oof_phishing_at_0_5": {
+    "precision": 0.7790441176470588,
+    "recall": 0.8975010588733587,
+    "f1": 0.8340877779964574
+  },
+  "memae_epochs": 5,
+  "memae_loss_history": [
+    [
+      [
+        0.24425896944431152,
+        0.19737157819473064
+      ],
+      [
+        0.13835723883029394,
+        0.10809222157839282
+      ],
+      [
+        0.12223905481589772,
+        0.09383620100217367
+      ],
+      [
+        0.11660211381372974,
+        0.09773849745879931
+      ],
+      [
+        0.11026428807843273,
+        0.09435243498133843
+      ]
+    ],
+    [
+      [
+        0.23018506142435732,
+        0.16343872734448361
+      ],
+      [
+        0.14272298200089334,
+        0.1320720991070025
+      ],
+      [
+        0.12824867517100544,
+        0.12346052274963956
+      ],
+      [
+        0.12029989240668311,
+        0.12052618916949447
+      ],
+      [
+        0.1191712266264464,
+        0.12034065357693396
+      ]
+    ],
+    [
+      [
+        0.22943752740373288,
+        0.14962206107236317
+      ],
+      [
+        0.14948841063715665,
+        0.13381706658899264
+      ],
+      [
+        0.14825549100124397,
+        0.11316022476881295
+      ],
+      [
+        0.13010617611196462,
+        0.10387106824917913
+      ],
+      [
+        0.11269460642626362,
+        0.162829245546941
+      ]
+    ],
+    [
+      [
+        0.28208084955084595,
+        0.13980513710405976
+      ],
+      [
+        0.15424515757814802,
+        0.14079424955085715
+      ],
+      [
+        0.13732227359345048,
+        0.1163515574852273
+      ],
+      [
+        0.12581824083739798,
+        0.1202577179381634
+      ],
+      [
+        0.11251264228621352,
+        0.12224784132552574
+      ]
+    ],
+    [
+      [
+        0.2463951412877582,
+        0.15833855491257914
+      ],
+      [
+        0.1636448889132622,
+        0.16638676066735023
+      ],
+      [
+        0.1537366106512391,
+        0.15549879030632596
+      ],
+      [
+        0.13898669291296037,
+        0.1099202027134221
+      ],
+      [
+        0.13570177027344613,
+        0.12682933668384344
+      ]
+    ]
+  ],
+  "memae_zero_day_threshold": 1.1006883382797241,
+  "feature_names": [
+    "auth_fail_count",
+    "display_name_spoof_risk",
+    "private_ip_leak",
+    "timestamp_regression",
+    "screenshot_hash_exists",
+    "visual_spoof_score",
+    "is_cred_harvester",
+    "graph_nodes_count",
+    "memae_loss",
+    "slm_verdict_severity",
+    "dga_max_entropy",
+    "nlp_urgency_score"
+  ],
+  "constant_features": [
+    "auth_fail_count",
+    "screenshot_hash_exists",
+    "visual_spoof_score",
+    "is_cred_harvester",
+    "slm_verdict_severity"
+  ],
+  "artifacts": {
+    "fusion_meta": "D:\\New folder 09\\models\\fusion_meta.joblib",
+    "memae": "D:\\New folder 09\\models\\topology\\memae.pt",
+    "memae_onnx": "D:\\New folder 09\\models\\topology\\memae.onnx",
+    "roc_curve": "D:\\New folder 09\\models\\roc_auc_curve.png",
+    "training_loss": "D:\\New folder 09\\models\\training_loss.png"
+  },
+  "promoted": {
+    "from": "D:\\New folder 09\\models_research",
+    "at": "2026-10-31T16:30:57+00:00",
+    "previous_models_archived_to": "D:\\New folder 09\\models_baseline_10_feature"
+  }
+}
