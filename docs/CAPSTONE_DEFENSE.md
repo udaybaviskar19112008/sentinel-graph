@@ -12,14 +12,19 @@
 
 | | |
 |---|---|
-| OOF ROC-AUC · 5-fold stratified · SpamAssassin 2002 (2,551 ham / 501 spam) | **0.855** |
-| Spam P / R @ 0.5 · Ham P / R | 0.634 / 0.477 · 0.902 / 0.946 |
-| MemAE | GCN 5→32→16 · memory 50×16 · τ = 0.1 · λ = 0.05 · zero-day threshold **0.913** (99th pct. of out-of-fold benign loss) |
-| Latency, laptop CPU | Tier 1 ≈ 60 ms · topology ≈ 90 ms · detonation ≈ 2.5 s · full assessment ≈ 4 s |
+| OOF ROC-AUC · 5-fold stratified · research corpus (4,211 legitimate 2002–03 / 2,361 phishing 2004–06) · 12 features | **0.953** |
+| Phishing P / R / F1 @ 0.5 · Legitimate P / R | 0.779 / 0.898 / **0.834** · 0.937 / 0.857 |
+| Out-of-time: 1,000 unseen 2023–25 phishing | **61.4%** caught @ 0.5 (10-feature model: 48.8% · 2002 baseline: 41.1%) |
+| Content-feature ablation (identical folds, identical MemAE) | 10 → 12 features: OOF ROC-AUC 0.926 → 0.953 |
+| 2002 baseline (archived) | OOF ROC-AUC 0.855, spam vs ham — a different task; not comparable with 0.953 |
+| MemAE | GCN 5→32→16 · memory 50×16 · τ = 0.1 · λ = 0.05 · zero-day threshold **1.10** (99th pct. of out-of-fold benign loss) |
+| Latency, laptop CPU | Tier 1 ≈ 6 ms on the demo lure (measured 2026-10-31) · topology ≈ 90 ms · detonation ≈ 2.5 s · full assessment ≈ 4 s (earlier run with a live detonation) |
 | Sandbox bounds | 4 s navigation budget · hard deadline 2 × 4 s + 15 s start-up = **23 s** worst case |
-| Tests | **310 passed** (1 live-network test opt-in) |
-| Demo lure, trained models | risk **15/100** · `private_ip_leak` SHAP **−0.129** · MemAE loss **0.0003** |
-| Modern corpus | 1,000 phishing emails (Nazario 2023–25, CC-BY-4.0) · benign half pending |
+| Tests | **353 passed** (1 live-network test opt-in) |
+| Demo lure, deployed models | risk **61/100** (10-feature: 55 · 2002 baseline: 15) · benign demo email **39/100** · `private_ip_leak` SHAP **−0.243** · MemAE loss **0.194** |
+| Content heuristics | NLP coercion fires on **20.3%** of phishing vs **0.1%** of legitimate (7.2% of 2023–25 phishing) · DGA entropy mean 2.30 vs 2.31 bits — no separation |
+| Mailing-list confound | `private_ip_leak` fires on **66.8%** of legitimate vs **3.0%** of phishing training mail |
+| Modern corpus | 1,000 phishing emails (Nazario 2023–25, CC-BY-4.0) · used only as the out-of-time test · benign half pending |
 | Stand-ins (flagged on screen) | vision model · SLM (always answers CRITICAL) · globe positions for unlocatable hops |
 
 ---
@@ -52,18 +57,18 @@
 ## Slide 3 — Tiers 1 & 2: Protocol Forensics & Headless Sandboxing
 
 **On the slide**
-- **Tier 1 (~60 ms):** hardened MIME · SPF/DKIM/DMARC/ARC from the *trusted* header only · private hop between public hops · backwards timestamps · homoglyph-folded display-name spoofing
+- **Tier 1 (~6 ms):** hardened MIME · SPF/DKIM/DMARC/ARC from the *trusted* header only · private hop between public hops · backwards timestamps · homoglyph-folded display-name spoofing · **Domain Generation Algorithm (DGA) entropy** of the links · **NLP coercion heuristics**
 - **Tier 2 (~2.5 s):** fresh headless Chromium per URL · JavaScript off · downloads refused · executables/archives/media blocked
 - **Egress proxy:** every connection, redirects included, may reach only public IPs (blocks `169.254.169.254`)
 
-> **Speaker Notes:** Tier one is deterministic. Authentication results are read only from the header our own server wrote, with comments blanked, because senders can inject text into lower ones. The route analyser flags a private address between public hops and clocks that run backwards. Tier two opens the link in a throwaway browser with scripts disabled. While building it I found that Playwright's routing never sees redirects, so a page could bounce the sandbox to the cloud metadata service. Every connection now passes an egress proxy that only connects to public addresses.
+> **Speaker Notes:** Tier one is deterministic. Authentication results are read only from the header our own server wrote, with comments blanked, because senders can inject text into lower ones. The route analyser flags a private address between public hops and clocks that run backwards, and two content heuristics score each link's domain for machine-generated randomness and the body for coercive phrases like "account suspended". Tier two opens the link in a throwaway browser with scripts disabled. While building it I found that Playwright's routing never sees redirects, so a page could bounce the sandbox to the cloud metadata service. Every connection now passes an egress proxy that only connects to public addresses.
 
 ---
 
 ## Slide 4 — Explainable AI: SHAP + Random Forest Meta-Scorer
 
 **On the slide**
-- 10 features from 4 subsystems → **Random Forest** → phishing probability
+- 12 features from 5 subsystems → **Random Forest** → phishing probability
 - **TreeSHAP:** exact, additive — `base value + Σ φᵢ = p` (tested to 10⁻⁶)
 - Attribution per feature **and** per subsystem; map edges coloured by sign of φ
 - The explanation exposes the model's own mistakes (Slide 7)
@@ -101,13 +106,14 @@
 ## Slide 7 — Metrics: OOF ROC-AUC & Modern Dataset Bootstrapping
 
 **On the slide**
-- **OOF ROC-AUC 0.855** · leakage controls: out-of-fold scoring · cross-fitted MemAE · SLM feature held constant (a naive label mapping gave a fake AUC of 1.0)
-- Spam recall **0.48** @ 0.5 — 2002 corpus has no DMARC; 5 of 10 features constant
-- **Demo lure scores 15/100:** SHAP shows `private_ip_leak` *lowering* risk (−0.129)
-- MemAE models route *shape*: forged 3-hop route 0.0003 vs benign 1-hop + link 0.96
-- Modern corpus pipeline: 1,000 phishing (2023–25) downloaded; benign mailbox pending
+- **OOF ROC-AUC 0.953** · phishing **F1 0.834** (P 0.779 / R 0.898) · 12 features · era-matched public corpus with full `Received` chains: 4,211 legitimate (2002–03) vs 2,361 phishing (2004–06)
+- **Ablation on identical folds:** adding DGA entropy + NLP coercion lifts ROC-AUC 0.926 → 0.953
+- Leakage controls: out-of-fold scoring · cross-fitted MemAE · SLM feature held constant (a naive label mapping gave a fake AUC of 1.0)
+- **Out-of-time:** on 1,000 unseen 2023–25 phishing emails, recall drops to **61.4%** (10-feature: 48.8%)
+- **Demo lure 61/100**, yet SHAP shows `private_ip_leak` *lowering* risk (−0.243) — a mailing-list confound (66.8% vs 3.0%)
+- Loss curves caught a real bug: clamped BCE has zero gradient once saturated → loss on logits; all folds converge
 
-> **Speaker Notes:** Out of fold, the system reaches a ROC-AUC of 0.855, and every prediction comes from a model that never saw that email. I removed a label leak from the original plan that produced a perfect, meaningless score. Recall is weak, and SHAP shows why: on a modern lure, the private-IP feature *lowers* risk — because two-thirds of the legitimate training mail is mailing-list traffic, which really does pass through private corporate relays. And the graph model learned route length, not forgery. "Bootstrapping" here means building the dataset: the modern phishing half is downloaded; the benign half needs a consented mailbox export.
+> **Speaker Notes:** On an era-matched corpus I bootstrapped from two public sources, the system reaches an out-of-fold ROC-AUC of 0.953 and a phishing F1 of 0.834; every prediction comes from a model that never saw that email. On identical folds, the two content heuristics alone lifted the AUC from 0.926. The number I'd ask you to remember: on a thousand phishing emails from 2023 to 2025, recall is 61.4 percent. Phishing changed in twenty years. SHAP also exposes a confound: the private-IP feature lowers risk, because two-thirds of the legitimate mail is mailing-list traffic. And the loss curves caught a real bug, now fixed.
 
 ---
 
@@ -132,11 +138,11 @@
 >
 > The memory is what makes that work mathematically. The addressing weights are non-negative and re-normalised to sum to 1, so the rebuilt latent ẑ = ŵM is a **convex combination** of memory rows: it can only lie in the convex hull of the 50 learned prototypes, and hard shrinkage at λ = 0.05 restricts it to a face spanned by a few of them. A plain autoencoder has no such constraint and learns to reconstruct anomalies too; here a latent outside the hull of normal behaviour cannot be reproduced, so the BCE between predicted and true adjacency rises. Structurally, a forest needs a fixed-length vector, while a route has a variable number of hops; the GCN propagation D̂^{-½}ÂD̂^{-½}HW shares weights across nodes, so the same 5→32→16 parameters handle any route length; the layers are permutation-equivariant and the adjacency loss is permutation-invariant, so node ordering cannot change the score.
 >
-> The honest limit, which I measured: today a route node's features are only its type and path position. So the trained MemAE models the *shape* of delivery — a forged three-hop route scores 0.0003 while a benign one-hop email with a link scores 0.96. It detects unusual route lengths and link profiles, not forged hops. The fix is to give every hop node its own attributes — private-range flag, ASN change, clock delta, reverse-DNS agreement — and the experiment that settles your question is an ablation: fusion AUC with and without the MemAE feature. I have not run that ablation yet.
+> The honest limit, which I measured: today a route node's features are only its type and path position, so the MemAE models the *shape* of delivery, not the hops themselves. On my two demo probes the deployed model ranks the forged three-hop route as more unusual than a benign one-hop email with a link — 0.194 against effectively zero — where the 2002 baseline had them backwards (0.0003 against 0.96). But that ordering comes from route length and link profile, not from seeing the forged hop. The fix is to give every hop node its own attributes — private-range flag, ASN change, clock delta, reverse-DNS agreement — and the experiment that settles your question is an ablation: fusion AUC with and without the MemAE feature. I have not run that ablation yet.
 
 ### Q2. "How do you handle the latency of headless browsers in a production SOC?"
 
-> **Answer:** First, it never blocks the other evidence. Tier 1 finishes in about 60 ms; detonation and topology run concurrently under `asyncio.gather`, and topology is scored in about 90 ms while the browser is still loading. The analyst sees authentication, route and graph results almost immediately; the screenshot arrives at about 2.5 s of a 4 s assessment.
+> **Answer:** First, it never blocks the other evidence. Tier 1 finishes in about 6 ms on the demo lure; detonation and topology run concurrently under `asyncio.gather`, and topology is scored in about 90 ms while the browser is still loading. The analyst sees authentication, route and graph results almost immediately; the screenshot arrives at about 2.5 s of a 4 s assessment.
 >
 > Second, the cost is bounded by construction. Only the first URL is detonated; JavaScript is off, so there is no script execution time; executables, archives and media are aborted at the routing layer; navigation and image loading share one 4 s budget (whatever DOM loading leaves is spent waiting for logos); and an `asyncio` hard deadline of 2 × 4 s + 15 s start-up = 23 s guarantees a hung browser can never stall the pipeline — the branch returns `None` and the score is computed without vision.
 >
@@ -146,7 +152,7 @@
 
 > **Answer:** A frontier model is more capable, and I don't claim otherwise. The question is what that capability would buy here, and what it would cost.
 >
-> What it would buy is small. The SLM reasons over evidence the deterministic tiers have already extracted, and its verdict is one of ten fusion features. In the shipped model that feature was deliberately held constant during training — mapping ham to BENIGN and spam to CRITICAL would have leaked the label and produced a fake AUC of 1.0 — so it currently carries zero weight in the score. Swapping in GPT-4 today would change the analyst's narrative, not the risk number.
+> What it would buy is small. The SLM reasons over evidence the deterministic tiers have already extracted, and its verdict is one of twelve fusion features. In the shipped model that feature was deliberately held constant during training — mapping ham to BENIGN and spam to CRITICAL would have leaked the label and produced a fake AUC of 1.0 — so it currently carries zero weight in the score. Swapping in GPT-4 today would change the analyst's narrative, not the risk number.
 >
 > What it would cost is structural. Every email would leave the organisation: personal data transferred to a third party, which must be justified under the DPDP Act 2023 and our retention policy. Sampling-based APIs are not bit-reproducible, and the vendor can change the model under us, so a verdict could not be re-derived for an audit; local greedy decoding gives the same tokens for the same input. Cost scales per token with mail volume, while a local int4 Phi-3-mini is a fixed ~2.5 GB on hardware we already own. And prompt-injection defences are only as good as what you can inspect: locally I control the whole template — the payload is folded to one line, section markers and chat-role tokens are neutralised, and the extracted verdict can escalate but never downgrade. Current state, stated plainly: the ONNX inference path is implemented and tested against the library's API; the demo runs a flagged scripted stand-in.
 
@@ -162,11 +168,12 @@
 
 ### Hard follow-up: "So what does your GCN actually learn beyond hop count?"
 
-> **Answer:** Today, mostly route shape: path length, how many links hang off the sender, and those links' character entropy. I measured it: the forged three-hop demo route scores 0.0003, a benign single-hop email with one link scores 0.96. The private-IP and backwards-clock evidence currently reaches the score as separate fusion features, not through the graph. Per-hop node attributes are the next change, and that is what would let the memory learn what a *normal hop* looks like rather than a normal route length.
+> **Answer:** Today, mostly route shape: path length, how many links hang off the sender, and those links' character entropy. I measured the two demo routes: the deployed MemAE scores the forged three-hop route 0.194 and a benign single-hop email with one link effectively zero — the right order, where the 2002 baseline had 0.0003 against 0.96 — but neither crosses the 1.10 zero-day threshold. The private-IP and backwards-clock evidence still reaches the score only as separate fusion features, not through the graph. Per-hop node attributes are the next change, and that is what would let the memory learn what a *normal hop* looks like rather than a normal route length.
 
 ### Prepared admissions (say these before you are asked)
 
 - The vision model and the SLM are **stand-ins**; the API and dashboard label them on every result. The SLM stand-in always answers CRITICAL, so the history log shows CRITICAL even for benign mail.
-- The shipped models were trained on **2002 data**; the demo lure scores 15/100 and `private_ip_leak` is inverted. Monotonic constraints and modern retraining fix the cause, not the symptom.
+- The deployed models were trained on **2002–06 public mail**: they catch **61.4%** of unseen 2023–25 phishing against 89.8% in-distribution, and `private_ip_leak` is inverted (−0.243) by a mailing-list confound in the legitimate data. Monotonic constraints and modern retraining fix the cause, not the symptom.
 - The MemAE sees **route shape, not hop attributes** (see the follow-up above).
-- All results are **out-of-fold on one public corpus**, not a production trial. No ablation or confidence interval for the AUC has been computed yet.
+- All results are **out-of-fold on one public corpus** plus one out-of-time phishing test, not a production trial. There is no modern legitimate mail, so the false-positive rate on today's mail is unmeasured; the one benign demo email rose from 29 to 39 with the 12-feature model. One ablation has been run (the two content features, on identical folds); no confidence interval for the AUC yet.
+- DGA entropy barely separates the classes on this corpus; most of the content gain most likely comes from NLP coercion, but no per-feature ablation has been run yet.

@@ -2,7 +2,8 @@
 /logs/
 /.cache/
 /models/
-/models_research/
+# Candidates and archived model sets (models_research/, models_baseline_2002/, ...)
+/models_*/
 
 # Python
 __pycache__/

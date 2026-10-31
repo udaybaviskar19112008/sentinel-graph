@@ -4,7 +4,7 @@
 
 ### Multimodal AI-Assisted Phishing & Threat Intelligence Detection
 
-![Tests](https://img.shields.io/badge/tests-310%20passed%20(local)-00ff66?style=for-the-badge&logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-353%20passed%20(local)-00ff66?style=for-the-badge&logo=pytest&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.14-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-1.31-005CED?style=for-the-badge&logo=onnx&logoColor=white)
@@ -27,8 +27,8 @@ Sentinel-Graph analyses a raw email (`.eml`) the way a Security Operations Centr
 >
 > | Engine | State | Notes |
 > |---|---|---|
-> | Topology MemAE | ✅ Trained | SpamAssassin 2002 corpus, benign routes only; zero-day threshold calibrated (0.913) |
-> | Fusion meta-model | ✅ Trained | 5-fold stratified OOF ROC-AUC **0.855** (see [Results](#-results)) |
+> | Topology MemAE | ✅ Trained | Research corpus (SpamAssassin ham 2002–03), benign routes only; zero-day threshold calibrated (1.10) |
+> | Fusion meta-model | ✅ Trained | Era-matched research corpus, all 12 features: 5-fold stratified OOF ROC-AUC **0.953**, phishing F1 0.834; catches 61.4% of unseen 2023–25 phishing (see [Results](#-results)) |
 > | Vision (MobileNetV3 slot) | ⚠️ Placeholder | Untrained stand-in with the real I/O contract until a model is placed in `models/vision/` |
 > | Cognitive SLM (Phi-3 slot) | ⚠️ Scripted stand-in | Real onnxruntime-genai path is implemented; activates when Phi-3 ONNX artifacts are installed. The stand-in always answers `CRITICAL`, and that verdict is what history records, so benign mail shows as CRITICAL until a real SLM is installed |
 > | Globe hop locations | ⚠️ Partly estimated | Public IPs are looked up; any hop that cannot be located is placed at a hashed stand-in position, drawn dashed and counted on the risk gauge |
@@ -46,7 +46,7 @@ Sentinel-Graph analyses a raw email (`.eml`) the way a Security Operations Centr
 ```mermaid
 flowchart LR
     EML["📧 Raw .eml"] -->|one binary frame| WS["⚡ FastAPI WebSocket<br/>/ws/api/v1/stream-analysis"]
-    WS --> T1["🔐 Tier 1 · Protocol forensics<br/>MIME unpack · Authentication-Results<br/>Received-chain IPs & timestamps"]
+    WS --> T1["🔐 Tier 1 · Protocol forensics<br/>MIME unpack · Authentication-Results<br/>Received-chain IPs & timestamps<br/>link entropy · coercive wording"]
     T1 --> FAN{{"asyncio.gather<br/>concurrent fan-out"}}
     FAN --> VIS["🌐 Tier 2 · Vision<br/>Playwright detonation (no JS)<br/>→ ONNX screenshot embedding"]
     FAN --> TOPO["🕸️ Tier 3 · Topology<br/>PyG delivery DAG<br/>→ GCN + MemAE reconstruction loss"]
@@ -71,6 +71,7 @@ Tier 1 runs first because every later tier needs its output (bodies, URLs, route
 | URL extraction | `src/extractors/url_extractor.py` | Browser-equivalent URLs (zero-width / bidi / backslash obfuscation removed) |
 | Identity | `src/forensics/auth_analyzer.py` | SPF / DKIM / DMARC / ARC verdicts, sender domains, display-name brand spoofing |
 | Route | `src/forensics/route_analyzer.py` | Hop count, private-IP leak between public hops, timestamp regression |
+| Content heuristics | `src/forensics/dga_detector.py`, `nlp_heuristics.py` | Domain Generation Algorithm (DGA) entropy of each link's registrable label; NLP coercion heuristics (urgency score) |
 | Sandbox | `src/vision/sandbox.py` + `egress_proxy.py` | 1024×768 screenshot of the lure, rendered with JavaScript disabled |
 | Vision | `src/vision/brand_detector.py` | SHA-256, L2-normalised embedding, `VisionForensics` |
 | Topology | `src/topology/graph_builder.py`, `memae_model.py` | Delivery DAG, MemAE anomaly loss, zero-day flag |
@@ -81,7 +82,24 @@ Tier 1 runs first because every later tier needs its output (bodies, URLs, route
 | History | `src/api/routers/history.py` | Paginated scan log and indicator pivot endpoints |
 | Dashboard | `frontend/src/pages/`, `components/CyberCanvas.tsx`, `lib/geoResolver.ts` | Live and history pages, globe, hop geolocation |
 
-Measured end-to-end on a laptop CPU (real Chromium, trained MemAE and fusion model): Tier 1 done at **~60 ms**, topology scored at **~90 ms** (concurrently with detonation), detonation **~2.5 s**, complete assessment **~4 s**.
+**The 12-feature fusion space** — one row per email, in this order (a saved model takes its columns by name):
+
+| # | Feature | Subsystem | What it measures |
+|---|---|---|---|
+| 0 | `auth_fail_count` | Protocol forensics | SPF / DKIM / DMARC / ARC results that are `fail` |
+| 1 | `display_name_spoof_risk` | Protocol forensics | Brand in the display name (1.0) or only in the subject (0.5) |
+| 2 | `private_ip_leak` | Protocol forensics | A private address between public hops |
+| 3 | `timestamp_regression` | Protocol forensics | A later hop stamped before an earlier one |
+| 4 | `screenshot_hash_exists` | Vision | The lure rendered in the sandbox |
+| 5 | `visual_spoof_score` | Vision | Visual similarity to a protected brand |
+| 6 | `is_cred_harvester` | Vision | The page collects credentials |
+| 7 | `graph_nodes_count` | Topology | Nodes in the delivery DAG |
+| 8 | `memae_loss` | Topology (GNN) | MemAE reconstruction loss of the delivery graph |
+| 9 | `slm_verdict_severity` | Cognitive SLM | Verdict rank, BENIGN 0 … CRITICAL 3 |
+| 10 | `dga_max_entropy` | Content heuristics | **Domain Generation Algorithm (DGA) entropy** of the links |
+| 11 | `nlp_urgency_score` | Content heuristics | **NLP coercion heuristics**: coercive-phrase urgency |
+
+Measured on a laptop CPU: Tier 1 completes in **~6 ms** on the demo lure (median of 7 warm runs through the app, 2026-10-31); the content heuristics cost 0.2 ms of that, and ~9 ms on a 95th-percentile (18 KB HTML) phishing email. An earlier end-to-end run with a live detonation (real Chromium, trained models) measured the topology scored at **~90 ms** (concurrently with detonation), detonation **~2.5 s** and the complete assessment **~4 s**.
 
 ---
 
@@ -97,7 +115,7 @@ A phishing kit can rewrite every word of its message, but it still has to *deliv
 4. **Hard shrinkage.** `ŵ = ReLU(w − λ)·w / (|w − λ| + ε)` with `λ = 0.05`, then L1 re-normalisation: each node must be rebuilt from a **sparse** mix of a few normal prototypes.
 5. **Decoder and score.** `ẑ = ŵ M`, `Â_pred = σ(ẑ ẑᵀ)`; the anomaly score is the off-diagonal binary cross-entropy against the real (undirected) adjacency.
 
-**Why the memory matters (the mathematical advantage).** A plain autoencoder generalises *too well*: it learns to reconstruct anomalies too, so their error stays low. Forcing reconstruction through a small memory of benign prototypes means an unseen topology simply cannot be expressed, and its loss rises (Gong et al., 2019). MemAE trains on **benign mail only**, so it needs no labelled examples of the attack — the property that lets it flag *zero-day* routing tricks a supervised classifier has never seen. The zero-day threshold is the 99th percentile of benign losses measured **out of fold** (0.913).
+**Why the memory matters (the mathematical advantage).** A plain autoencoder generalises *too well*: it learns to reconstruct anomalies too, so their error stays low. Forcing reconstruction through a small memory of benign prototypes means an unseen topology simply cannot be expressed, and its loss rises (Gong et al., 2019). MemAE trains on **benign mail only**, so it needs no labelled examples of the attack — the property that lets it flag *zero-day* routing tricks a supervised classifier has never seen. The zero-day threshold is the 99th percentile of benign losses measured **out of fold** (1.10).
 
 **What it can see today.** Route nodes carry only their type and position along the path; IP semantics (private range, ASN, reverse-DNS agreement, per-hop clock deltas) are separate fusion features, not node features. The trained MemAE therefore models the *shape* of delivery — route length and link profile — and enriching node features with per-hop attributes is the step that lets it see forged hops directly (see [Results](#-results)).
 
@@ -107,11 +125,18 @@ A phishing kit can rewrite every word of its message, but it still has to *deliv
 - **Deterministic.** Greedy decoding: the same evidence yields the same deduction, so verdicts are reproducible for audit.
 - **Streamed.** Tokens reach the analyst as they are generated, through the same WebSocket as the telemetry.
 - **Injection-hardened.** Attacker text cannot forge template sections, `VERDICT:` lines or chat-role tokens; and the extracted verdict can **escalate but never downgrade** when outputs conflict.
-- **One voice, not the judge.** The SLM verdict is one of ten fusion features; the final score is the meta-model's, explained by SHAP.
+- **One voice, not the judge.** The SLM verdict is one of twelve fusion features; the final score is the meta-model's, explained by SHAP.
 
 ### 📊 Explainable late fusion
 
-Ten features from every tier feed a Random Forest. **TreeSHAP** gives exact additive attributions — base value + Σ SHAP = predicted probability (verified in the test suite to 10⁻⁶) — reported per feature and per subsystem (`PROTOCOL_FORENSICS`, `VISION_ENGINE`, `TOPOLOGY_GNN`, `COGNITIVE_SLM`). The dashboard colours graph edges by the sign of their subsystem's SHAP impact.
+Twelve features from five subsystems feed a Random Forest. **TreeSHAP** gives exact additive attributions — base value + Σ SHAP = predicted probability (verified in the test suite to 10⁻⁶) — reported per feature and per subsystem (`PROTOCOL_FORENSICS`, `VISION_ENGINE`, `TOPOLOGY_GNN`, `COGNITIVE_SLM`, `CONTENT_HEURISTICS`). The dashboard colours graph edges by the sign of their subsystem's SHAP impact; content heuristics describe the whole message, so they colour none. A saved model names the features it was trained on and receives exactly those columns, by name, so adding a feature never breaks a deployed model: the new feature is ignored (and logged) until a model trained on it is promoted.
+
+### 🔤 Content heuristics: DGA entropy and NLP coercion
+
+Two lexical features computed in Tier 1, by the same helpers in the live pipeline and in training, so the two cannot drift apart:
+
+- **Domain Generation Algorithm (DGA) entropy** (`dga_max_entropy`) — the highest Shannon entropy, H = Σ p log₂(1/p), of any link's *registrable label*, the part left of the public suffix (`login.xkqjfhzyw.co.uk` → `xkqjfhzyw`, 3.17 bits; `google`, 1.92 bits). Subdomains are free attacker padding and are ignored; IP-literal hosts are skipped; the suffix list is offline. Raw entropy is bounded by log₂(length), so long legitimate names score high too — and on the research corpus it barely separates the classes (mean 2.31 bits legitimate, 2.30 phishing): 2004–06 phishing used human-looking domains, not generated ones.
+- **NLP coercion heuristics** (`nlp_urgency_score`) — eight pressure phrases ("immediate action", "account suspended", "verify your identity", …), 0.25 per match, capped at 1, matched in their natural inflections after NFKC folding with invisible characters removed, so zero-width splits and line breaks cannot hide a phrase. The bare phrases fired on 1.5% of phishing; the inflected forms fire on 20.3% of 2004–06 phishing, 7.2% of 2023–25 phishing and 0.1% of legitimate mail.
 
 ### ✂️ Receiver-side hop normalisation
 
@@ -146,16 +171,17 @@ The globe needs a latitude and longitude for each hop, and a live demo cannot de
 
 ## 📈 Results
 
-Trained on the **SpamAssassin public corpus (2002)**: 2,551 ham, 501 spam.
+The deployed models were trained on the **era-matched research corpus** — 4,211 legitimate emails (SpamAssassin easy and hard ham, 2002–03) and 2,361 phishing emails (Jose Nazario, 2004–06), all with intact `Received` chains — using all **twelve** features. They were promoted unchanged from `models_research/` on 2026-10-31; earlier model sets are archived ([below](#previous-models-archived)).
 
-| Metric | Value |
-|---|---|
-| Out-of-fold ROC-AUC (5-fold stratified) | **0.855** |
-| Ham precision / recall | 0.902 / 0.946 |
-| Spam precision / recall (threshold 0.5) | 0.634 / 0.477 |
-| Accuracy | 0.869 |
-| MemAE zero-day threshold (99th pct. of OOF benign loss) | 0.913 |
-| Full training run (CPU) | ~5 min |
+| Out of fold (5-fold stratified) | 12 features (deployed) | 10 features (previous) |
+|---|---|---|
+| ROC-AUC | **0.953** | 0.926 |
+| Phishing precision / recall / F1 at 0.5 | 0.779 / 0.898 / **0.834** | 0.772 / 0.875 / 0.820 |
+| Legitimate precision / recall | 0.937 / 0.857 | 0.924 / 0.855 |
+| Accuracy | 0.872 | 0.862 |
+| MemAE zero-day threshold (99th pct. of OOF benign loss) | 1.10 | 1.10 |
+
+Both columns use the same folds and an identical MemAE (every weight tensor equal), so the difference is the two content heuristics alone. The ROC curve and the per-fold MemAE loss curves are in `models/roc_auc_curve.png` and `models/training_loss.png`.
 
 **Leakage controls** (the reason these numbers can be trusted):
 
@@ -163,27 +189,33 @@ Trained on the **SpamAssassin public corpus (2002)**: 2,551 ham, 501 spam.
 - **Cross-fitted MemAE.** Each email's MemAE loss comes from a MemAE trained on the *other* folds' benign mail.
 - **No label leak through the SLM.** The SLM verdict was deliberately held constant during training: mapping ham→BENIGN and spam→CRITICAL would have produced a meaningless AUC of 1.0.
 
-**What the numbers do not show.** The 2002 corpus predates DMARC (no `Authentication-Results` headers), and vision and the SLM could not run per training email. Those five features were constant, so the model learned only from routing, display-name and topology signals, and it under-scores modern phishing. Retraining on a modern labelled corpus is the first item of future work.
+**Out-of-time check — quote it alongside the AUC.** On 1,000 Nazario phishing emails from **2023–25**, which no model here was trained on, the deployed models catch **61.4%** at 0.5 (median phishing probability 0.55); the 10-feature models caught 48.8% (0.48) and the 2002 baseline 41.1% (0.40). Recall falls from 89.8% in-distribution to 61.4% twenty years later: the cross-validated AUC describes 2004–06 phishing, not today's. There is no modern legitimate mail, so the out-of-time false-positive rate is unmeasured.
 
-**Measured on the demo lure** (`tests/e2e/test_capstone_defense.py -s`, trained models): a 2026-style Apple lure with SPF/DMARC failures, a private hop between public relays and a backwards clock scores **15/100**. Its SHAP breakdown shows why: `private_ip_leak` pushes the probability **down** (−0.129) and `timestamp_regression` up (+0.083). The cause is measured, not guessed: **two-thirds of SpamAssassin's legitimate mail is mailing-list traffic** (Red Hat's `exmh-workers`, `xent.com`, SourceForge lists), which genuinely travels sender → corporate internal relays (172.16.x, 192.168.x) → public list server. In the research corpus `private_ip_leak` fires on 66.8% of legitimate mail and 3.0% of phishing, so the forest learned "private hop = mailing list = safe" — exactly what the monotonic constraints below would forbid. The trained MemAE scores this forged 3-hop route at a loss of **0.0003** (very normal) yet a benign single-hop email with one link at **0.96**, above the zero-day threshold: it learned the route lengths of 2002 ham, not forgery (see *What it can see today*, above).
+**What the numbers do not show.** Neither source has `Authentication-Results` headers (both predate DMARC), and vision and the SLM could not run per training email, so five of the twelve features (`auth_fail_count`, the three vision features, `slm_verdict_severity`) were constant: the model cannot use them. The per-class audit suggests most of the content-heuristic gain comes from the coercion score, since DGA entropy barely separates the classes here. Retraining on a modern labelled corpus is still the first item of future work.
 
-### Candidate models: era-matched research corpus (in `models_research/`, not deployed)
+**Measured on the demo lure** (`tests/e2e/test_capstone_defense.py -s`): a 2026-style Apple lure with SPF/DMARC failures, a private hop between public relays and a backwards clock scores **61/100** (10-feature models: 55; 2002 baseline: 15). SHAP: `display_name_spoof_risk` +0.310, `private_ip_leak` **−0.243**, `graph_nodes_count` +0.089, `timestamp_regression` +0.064, `memae_loss` +0.044, `nlp_urgency_score` −0.020 (the lure uses no coercive phrase, which counts as weak evidence of legitimate mail). The benign end-to-end email scores **39/100** (10-feature: 29; baseline: 14): still below 50, but the one benign data point we have moved up.
 
-Trained on 4,211 legitimate (SpamAssassin 2002–03) and 2,361 phishing (Nazario 2004–06) emails, 5-fold stratified, MemAE cross-fitted as above.
+**Why `private_ip_leak` lowers risk — measured, not guessed.** Two-thirds of SpamAssassin's legitimate mail is **mailing-list traffic** (Red Hat's `exmh-workers`, `xent.com`, SourceForge lists), which genuinely travels sender → corporate internal relays (172.16.x, 192.168.x) → public list server. In the research corpus `private_ip_leak` fires on 66.8% of legitimate mail and 3.0% of phishing, so the forest learned "private hop = mailing list = safe". Both corpora carry the confound (SHAP −0.129 in the 2002 baseline, −0.312 with ten features, −0.243 with twelve); a better dataset alone cannot remove it — the monotonic constraints below would forbid it.
 
-| Out of fold | Value |
-|---|---|
-| ROC-AUC | **0.926** |
-| Phishing precision / recall / F1 at 0.5 | 0.772 / 0.875 / **0.820** |
-| Legitimate precision / recall | 0.924 / 0.855 |
-| Accuracy | 0.862 |
-| MemAE zero-day threshold (99th pct. OOF benign loss) | 1.10 |
+**The route model.** On the same probes, the deployed MemAE ranks the forged 3-hop route as more unusual than the benign 1-hop route — loss **0.194** vs **≈ 0** (3.7 × 10⁻¹⁵), neither flagged zero-day — where the 2002 baseline had them backwards (0.0003 vs 0.96, with the benign route falsely flagged). It still sees only route shape, not hop attributes (see *What it can see today*), so the forged hop itself is not what it detects.
 
-**On mail neither model was trained on** — 1,000 Nazario phishing emails from 2023–25 — the candidate catches **48.8%** at 0.5 (deployed: 41.1%) and scores the demo lure **55/100** (deployed: 15). Recall falls from 87.5% in-distribution to 48.8% twenty years later: the cross-validated AUC describes 2004–06 phishing, not today's. There is no modern legitimate mail to measure the out-of-time false-positive rate; the benign demo email rises from 14 to 29.
+**Two training bugs the loss curves exposed.** The first research run had two folds diverge at epoch 4 (training loss 0.18 → 2.14), inflating the zero-day threshold to 4.79. Clipping gradients alone made it worse — a fold climbed to 10.8 and the threshold sat at 27.78 ≈ −ln(10⁻¹²), the ceiling of the old clamped loss. The real fault: `reconstruction_loss` clamped sigmoid probabilities before BCE, which has **zero gradient once saturated**, so a drifting model could never recover. It now computes BCE on logits (identical where unsaturated — the 2002 baseline MemAE scores the demo lure exactly as before — but always differentiable), and all five folds converge (0.25 → 0.11–0.14, validation 0.09–0.16).
 
-**What the candidate still gets wrong.** `private_ip_leak` is more strongly inverted (SHAP −0.312 on the demo lure) because the mailing-list confound above is in this corpus too; `display_name_spoof_risk` now carries real weight (+0.352) and the MemAE pushes the lure's risk up (+0.035, loss 0.194). Five features are still constant in training (no `Authentication-Results` in either source; vision and the SLM held fixed), so the model cannot use them.
+### Previous models (archived)
 
-**Two training bugs the loss curves exposed.** The first research run had two folds diverge at epoch 4 (training loss 0.18 → 2.14), inflating the zero-day threshold to 4.79. Clipping gradients alone made it worse — a fold climbed to 10.8 and the threshold sat at 27.78 ≈ −ln(10⁻¹²), the ceiling of the old clamped loss. The real fault: `reconstruction_loss` clamped sigmoid probabilities before BCE, which has **zero gradient once saturated**, so a drifting model could never recover. It now computes BCE on logits (identical where unsaturated — the deployed MemAE scores the demo lure exactly as before — but always differentiable), and all five folds converge (0.25 → 0.11–0.14, validation 0.09–0.16).
+| Out of fold (5-fold stratified) | 10 features, research corpus | 2002 baseline |
+|---|---|---|
+| Folder | `models_baseline_10_feature/` | `models_baseline_2002/` |
+| Training data | as above | 2,551 ham / 501 spam (SpamAssassin 2002) |
+| ROC-AUC | 0.926 | 0.855 |
+| Positive class precision / recall at 0.5 | 0.772 / 0.875 (phishing) | 0.634 / 0.477 (spam) |
+| Negative class precision / recall | 0.924 / 0.855 | 0.902 / 0.946 |
+| Accuracy | 0.862 | 0.869 |
+| MemAE zero-day threshold | 1.10 | 0.913 |
+| Unseen 2023–25 phishing caught at 0.5 | 48.8% | 41.1% |
+| Demo lure | 55/100 | 15/100 |
+
+The 2002 AUC is not directly comparable with the research-corpus AUCs: a different corpus, and it separates *spam* from ham rather than *phishing* from legitimate mail. The fair comparison is on mail none of them saw, the out-of-time row. To roll back, copy the contents of either folder over `models/`.
 
 ---
 
@@ -256,13 +288,13 @@ python scripts/train_orchestrator.py
 
 Enron is deliberately not used: its public release strips `Received` headers, so every benign email would have no route and the route models would learn "has headers" instead of phishing. Real phishing archives trip antivirus; on Windows, Defender quarantines `phishing3.mbox` (2006–07), and the fetch skips a quarantined mailbox and says so rather than failing (the corpus is then 4,211 benign / 2,361 phishing). Do not disable the scanner to get it back; if you want it, exclude only `data\raw\downloads\nazario` and `data\raw\research`.
 
-**Promote a candidate** only after comparing it with the deployed models; `--models-dir models` trains straight into the folder the app loads:
+**Promote a candidate** only after comparing it with the deployed models on mail neither has seen. The shipped models were promoted by backing up `models/` and copying the evaluated candidate files over it, so what ships is byte-for-byte what was measured. Alternatively, `--models-dir models` trains straight into the folder the app loads:
 
 ```bash
 python scripts/train_orchestrator.py --models-dir models
 ```
 
-**Shipped models (2002 SpamAssassin baseline).** Extract `20021010_easy_ham.tar.bz2` and `20021010_spam.tar.bz2` into `data/raw/spamassassin/`, then pass `--data-dir data/raw/spamassassin`. Retraining will not reproduce the shipped weights exactly: MemAE training now clips gradients and computes its loss on logits (see Results).
+**2002 baseline (archived).** Extract `20021010_easy_ham.tar.bz2` and `20021010_spam.tar.bz2` into `data/raw/spamassassin/`, then pass `--data-dir data/raw/spamassassin`. Retraining will not reproduce the archived weights exactly: MemAE training now clips gradients and computes its loss on logits (see Results).
 
 **Modern corpus (`data/raw/modern_2026/`).** Hand-classified 2023–25 phishing from the same Nazario archive. No public archive of modern legitimate mail keeps full routing headers, so the benign half comes from an mbox you export yourself:
 
@@ -280,7 +312,7 @@ python scripts/fetch_modern_corpus.py real --limit 1000 --benign-mbox path/to/in
 python -m pytest
 ```
 
-310 tests: unit, property and adversarial cases for every tier, real-Chromium sandbox tests, training-pipeline tests, history API and persistence tests, and `tests/e2e/` — whole-system runs through the WebSocket API with real engine loading. `tests/e2e/test_capstone_defense.py` runs the **deployed** models (skipped until a training run exists) from ingestion to the history API; add `-s` to print the trained model's SHAP breakdown for the demo lure. `python -m pytest -m "not e2e"` skips the slower end-to-end tests; `SOC_LIVE_NETWORK_TESTS=1` adds a live internet detonation. Static checks:
+353 tests: unit, property and adversarial cases for every tier, real-Chromium sandbox tests, training-pipeline tests, history API and persistence tests, and `tests/e2e/` — whole-system runs through the WebSocket API with real engine loading. `tests/e2e/test_capstone_defense.py` runs the **deployed** models (skipped until a training run exists) from ingestion to the history API; add `-s` to print the trained model's SHAP breakdown for the demo lure. `python -m pytest -m "not e2e"` skips the slower end-to-end tests; `SOC_LIVE_NETWORK_TESTS=1` adds a live internet detonation. Static checks:
 
 ```bash
 python -m mypy src tests scripts app
@@ -318,7 +350,7 @@ src/api/routers/     REST history API (scans, indicator pivots)
 src/core/            settings, JSON logging, orchestrator, database, shared helpers
 src/models/          SQLAlchemy scan and indicator tables
 src/extractors/      MIME unpacker, URL extractor
-src/forensics/       identity (auth + spoofing) and route analysers
+src/forensics/       identity (auth + spoofing), route, DGA-entropy and NLP-coercion analysers
 src/vision/          Playwright sandbox, egress proxy, ONNX brand detector
 src/topology/        PyG graph builder, GraphMemAE
 src/cognitive/       prompt builder, local SLM streaming + verdict extraction
@@ -326,7 +358,7 @@ src/fusion/          meta-scorer, SHAP engine
 scripts/             train_orchestrator.py (lazy ingestion, cross-fitting, OOF CV),
                      fetch_modern_corpus.py (research: SpamAssassin 2002-03 ham + Nazario 2004-07;
                      real: Nazario 2023-25 + your benign mbox; synthetic smoke tests)
-tests/               310 tests, including tests/e2e/
+tests/               353 tests, including tests/e2e/
 frontend/            React 19 + Vite + Tailwind + Three.js + React Flow dashboard
   src/pages/         LiveDetonation (/) and ThreatHistory (/history)
 docs/                CAPSTONE_PRESENTATION.md (12-min talk), CAPSTONE_DEFENSE.md (5-min talk + Q&A)
@@ -338,6 +370,7 @@ docs/                CAPSTONE_PRESENTATION.md (12-min talk), CAPSTONE_DEFENSE.md
 
 - **Modern training data.** Retrain on a labelled 2020s corpus with `Authentication-Results` headers, and run vision and the SLM during training so their features carry signal.
 - **Monotonic fusion.** Constrain spoofing, IP-leak and regression features to only *raise* risk (e.g. `HistGradientBoostingClassifier` with monotonic constraints) so out-of-distribution mail cannot invert them — as `private_ip_leak` currently is on the demo lure.
+- **A stronger DGA signal.** Raw label entropy is length-confounded and barely separates the classes on the research corpus; a character n-gram model of benign domain names is the standard upgrade.
 - **Richer graph nodes.** Give each hop node its own attributes (private/bogon flag, ASN change from the previous hop, clock delta, reverse-DNS agreement) so the MemAE can see a forged hop rather than only the route's shape.
 - **Benign mail for the modern corpus.** The phishing half of `data/raw/modern_2026/` is in place; a consented, exported benign mailbox completes it.
 - **Real vision model** and brand centroids for `visual_spoof_score`; credential-form detection for `is_credential_harvester`.
