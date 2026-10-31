@@ -81,6 +81,9 @@ export function applyServerMessage(message: ServerMessage): void {
       void plotRoute(message.analysis_id, message.assessment.header_forensics.extracted_ips)
       return
     }
+    case 'TIER_1':
+      store.setHeaderFindings(message.findings)
+      break
     case 'TOPOLOGY':
       if (message.graph_layout) {
         const { nodes, edges } = toFlowElements(message.graph_layout)

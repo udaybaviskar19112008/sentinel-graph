@@ -148,6 +148,8 @@ export interface ThreatState {
   graphNodes: Node<NodeData>[]
   graphEdges: Edge<EdgeData>[]
   geoCoordinates: GeoPoint[] // one per relay-hop IP, sender side first
+  // Tier 1 findings as soon as they stream in (the assessment repeats them at COMPLETE).
+  headerFindings: HeaderForensics | null
 
   setStatus: (status: SocketStatus) => void
   setPhase: (phase: string) => void
@@ -161,6 +163,7 @@ export interface ThreatState {
     details?: AnalysisDetails,
   ) => void
   setGeoCoordinates: (points: GeoPoint[]) => void
+  setHeaderFindings: (findings: HeaderForensics) => void
   resetState: () => void
 }
 
@@ -173,6 +176,7 @@ const initialScan = {
   graphNodes: [] as Node<NodeData>[],
   graphEdges: [] as Edge<EdgeData>[],
   geoCoordinates: [] as GeoPoint[],
+  headerFindings: null,
 } satisfies Partial<ThreatState>
 
 export const useThreatStore = create<ThreatState>()((set) => ({
@@ -187,6 +191,7 @@ export const useThreatStore = create<ThreatState>()((set) => ({
   setAssessment: (assessment, graphNodes, graphEdges, details) =>
     set({ assessment, graphNodes, graphEdges, details: details ?? null, currentPhase: 'COMPLETE' }),
   setGeoCoordinates: (geoCoordinates) => set({ geoCoordinates }),
+  setHeaderFindings: (headerFindings) => set({ headerFindings }),
   // Socket status is left alone: it tracks the connection, not the scan.
   resetState: () => set({ ...initialScan }),
 }))
