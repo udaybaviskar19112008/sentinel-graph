@@ -29,6 +29,7 @@ dependencies = [
     "onnx",
     "onnxscript",
     "scikit-learn",
+    "matplotlib",  # training plots (ROC, MemAE loss)
     "joblib",
     "shap",
     "tqdm",

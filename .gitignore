@@ -2,6 +2,7 @@
 /logs/
 /.cache/
 /models/
+/models_research/
 
 # Python
 __pycache__/

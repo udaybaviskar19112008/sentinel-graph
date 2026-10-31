@@ -4,7 +4,7 @@
 
 ### Multimodal AI-Assisted Phishing & Threat Intelligence Detection
 
-![Tests](https://img.shields.io/badge/tests-306%20passed%20(local)-00ff66?style=for-the-badge&logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-310%20passed%20(local)-00ff66?style=for-the-badge&logo=pytest&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.14-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-1.31-005CED?style=for-the-badge&logo=onnx&logoColor=white)
@@ -165,7 +165,25 @@ Trained on the **SpamAssassin public corpus (2002)**: 2,551 ham, 501 spam.
 
 **What the numbers do not show.** The 2002 corpus predates DMARC (no `Authentication-Results` headers), and vision and the SLM could not run per training email. Those five features were constant, so the model learned only from routing, display-name and topology signals, and it under-scores modern phishing. Retraining on a modern labelled corpus is the first item of future work.
 
-**Measured on the demo lure** (`tests/e2e/test_capstone_defense.py -s`, trained models): a 2026-style Apple lure with SPF/DMARC failures, a private hop between public relays and a backwards clock scores **15/100**. Its SHAP breakdown shows why: `private_ip_leak` pushes the probability **down** (−0.129) and `timestamp_regression` up (+0.083). The likely cause is that private hops between public relays were common in 2002 *legitimate* corporate mail, so the forest learned the opposite of the feature's meaning today — exactly what the monotonic constraints below would forbid. The trained MemAE scores this forged 3-hop route at a loss of **0.0003** (very normal) yet a benign single-hop email with one link at **0.96**, above the zero-day threshold: it learned the route lengths of 2002 ham, not forgery (see *What it can see today*, above).
+**Measured on the demo lure** (`tests/e2e/test_capstone_defense.py -s`, trained models): a 2026-style Apple lure with SPF/DMARC failures, a private hop between public relays and a backwards clock scores **15/100**. Its SHAP breakdown shows why: `private_ip_leak` pushes the probability **down** (−0.129) and `timestamp_regression` up (+0.083). The cause is measured, not guessed: **two-thirds of SpamAssassin's legitimate mail is mailing-list traffic** (Red Hat's `exmh-workers`, `xent.com`, SourceForge lists), which genuinely travels sender → corporate internal relays (172.16.x, 192.168.x) → public list server. In the research corpus `private_ip_leak` fires on 66.8% of legitimate mail and 3.0% of phishing, so the forest learned "private hop = mailing list = safe" — exactly what the monotonic constraints below would forbid. The trained MemAE scores this forged 3-hop route at a loss of **0.0003** (very normal) yet a benign single-hop email with one link at **0.96**, above the zero-day threshold: it learned the route lengths of 2002 ham, not forgery (see *What it can see today*, above).
+
+### Candidate models: era-matched research corpus (in `models_research/`, not deployed)
+
+Trained on 4,211 legitimate (SpamAssassin 2002–03) and 2,361 phishing (Nazario 2004–06) emails, 5-fold stratified, MemAE cross-fitted as above.
+
+| Out of fold | Value |
+|---|---|
+| ROC-AUC | **0.926** |
+| Phishing precision / recall / F1 at 0.5 | 0.772 / 0.875 / **0.820** |
+| Legitimate precision / recall | 0.924 / 0.855 |
+| Accuracy | 0.862 |
+| MemAE zero-day threshold (99th pct. OOF benign loss) | 1.10 |
+
+**On mail neither model was trained on** — 1,000 Nazario phishing emails from 2023–25 — the candidate catches **48.8%** at 0.5 (deployed: 41.1%) and scores the demo lure **55/100** (deployed: 15). Recall falls from 87.5% in-distribution to 48.8% twenty years later: the cross-validated AUC describes 2004–06 phishing, not today's. There is no modern legitimate mail to measure the out-of-time false-positive rate; the benign demo email rises from 14 to 29.
+
+**What the candidate still gets wrong.** `private_ip_leak` is more strongly inverted (SHAP −0.312 on the demo lure) because the mailing-list confound above is in this corpus too; `display_name_spoof_risk` now carries real weight (+0.352) and the MemAE pushes the lure's risk up (+0.035, loss 0.194). Five features are still constant in training (no `Authentication-Results` in either source; vision and the SLM held fixed), so the model cannot use them.
+
+**Two training bugs the loss curves exposed.** The first research run had two folds diverge at epoch 4 (training loss 0.18 → 2.14), inflating the zero-day threshold to 4.79. Clipping gradients alone made it worse — a fold climbed to 10.8 and the threshold sat at 27.78 ≈ −ln(10⁻¹²), the ceiling of the old clamped loss. The real fault: `reconstruction_loss` clamped sigmoid probabilities before BCE, which has **zero gradient once saturated**, so a drifting model could never recover. It now computes BCE on logits (identical where unsaturated — the deployed MemAE scores the demo lure exactly as before — but always differentiable), and all five folds converge (0.25 → 0.11–0.14, validation 0.09–0.16).
 
 ---
 
@@ -224,22 +242,32 @@ Install `onnxruntime-genai` (CPU, CUDA or DirectML build) and copy a Phi-3-mini 
 
 ## 🎓 Training the models
 
-The trainer reads any folder of labelled `.eml` files: `benign/` + `phishing/`, or SpamAssassin's `easy_ham/` + `spam/`. It writes `models/fusion_meta.joblib`, `models/topology/memae.pt`, a self-verified `memae.onnx`, and `models/training_report.json`.
+The trainer reads any folder of labelled `.eml` files: `benign/` + `phishing/`, or SpamAssassin's `easy_ham/` + `spam/`. **Candidates go to `models_research/` by default**, never straight to the `models/` the app loads, so a run cannot replace working models before it has been compared. Each run writes `fusion_meta.joblib`, `topology/memae.pt`, a self-verified `memae.onnx`, `training_report.json` (out-of-fold ROC-AUC, phishing precision / recall / F1 at 0.5, per-fold MemAE loss history), `roc_auc_curve.png` and `training_loss.png` (MemAE training vs held-out benign loss per epoch; each fold validates on its own held-out benign mail, so the curve costs no extra data).
 
-**Shipped models (reproduce the Results).** Extract `20021010_easy_ham.tar.bz2` and `20021010_spam.tar.bz2` (spamassassin.apache.org/old/publiccorpus) into `data/raw/spamassassin/`:
-
-```bash
-python scripts/train_orchestrator.py --data-dir data/raw/spamassassin
-```
-
-**Modern corpus (default `--data-dir`, `data/raw/modern_2026/`).** Downloads hand-classified 2023–2025 phishing from Jose Nazario's corpus (CC-BY-4.0, attribution written alongside). No public archive of modern legitimate mail keeps full routing headers, so the benign half comes from an mbox you export yourself:
+**Research corpus (default `--data-dir`, `data/raw/research/`).** Era-matched public mail with intact `Received` chains: SpamAssassin's easy and hard ham (2002–03) against Jose Nazario's early phishing mailboxes (2004–07, CC-BY-4.0), deduplicated by Message-ID and content hash, with attribution written alongside (~85 MB of downloads):
 
 ```bash
-python scripts/fetch_modern_corpus.py real --limit 1000 --benign-mbox path/to/inbox.mbox
+python scripts/fetch_modern_corpus.py research
 ```
 
 ```bash
 python scripts/train_orchestrator.py
+```
+
+Enron is deliberately not used: its public release strips `Received` headers, so every benign email would have no route and the route models would learn "has headers" instead of phishing. Real phishing archives trip antivirus; on Windows, Defender quarantines `phishing3.mbox` (2006–07), and the fetch skips a quarantined mailbox and says so rather than failing (the corpus is then 4,211 benign / 2,361 phishing). Do not disable the scanner to get it back; if you want it, exclude only `data\raw\downloads\nazario` and `data\raw\research`.
+
+**Promote a candidate** only after comparing it with the deployed models; `--models-dir models` trains straight into the folder the app loads:
+
+```bash
+python scripts/train_orchestrator.py --models-dir models
+```
+
+**Shipped models (2002 SpamAssassin baseline).** Extract `20021010_easy_ham.tar.bz2` and `20021010_spam.tar.bz2` into `data/raw/spamassassin/`, then pass `--data-dir data/raw/spamassassin`. Retraining will not reproduce the shipped weights exactly: MemAE training now clips gradients and computes its loss on logits (see Results).
+
+**Modern corpus (`data/raw/modern_2026/`).** Hand-classified 2023–25 phishing from the same Nazario archive. No public archive of modern legitimate mail keeps full routing headers, so the benign half comes from an mbox you export yourself:
+
+```bash
+python scripts/fetch_modern_corpus.py real --limit 1000 --benign-mbox path/to/inbox.mbox
 ```
 
 `fetch_modern_corpus.py synthetic` writes a separate, clearly-labelled smoke-test corpus to `data/raw/synthetic_2026/`; it exercises the pipeline but never feeds training, because a model trained on generated mail learns the generator. Add `--debug-slice 100` to any training run for a quick check.
@@ -252,7 +280,7 @@ python scripts/train_orchestrator.py
 python -m pytest
 ```
 
-306 tests: unit, property and adversarial cases for every tier, real-Chromium sandbox tests, training-pipeline tests, history API and persistence tests, and `tests/e2e/` — whole-system runs through the WebSocket API with real engine loading. `tests/e2e/test_capstone_defense.py` runs the **deployed** models (skipped until a training run exists) from ingestion to the history API; add `-s` to print the trained model's SHAP breakdown for the demo lure. `python -m pytest -m "not e2e"` skips the slower end-to-end tests; `SOC_LIVE_NETWORK_TESTS=1` adds a live internet detonation. Static checks:
+310 tests: unit, property and adversarial cases for every tier, real-Chromium sandbox tests, training-pipeline tests, history API and persistence tests, and `tests/e2e/` — whole-system runs through the WebSocket API with real engine loading. `tests/e2e/test_capstone_defense.py` runs the **deployed** models (skipped until a training run exists) from ingestion to the history API; add `-s` to print the trained model's SHAP breakdown for the demo lure. `python -m pytest -m "not e2e"` skips the slower end-to-end tests; `SOC_LIVE_NETWORK_TESTS=1` adds a live internet detonation. Static checks:
 
 ```bash
 python -m mypy src tests scripts app
@@ -296,8 +324,9 @@ src/topology/        PyG graph builder, GraphMemAE
 src/cognitive/       prompt builder, local SLM streaming + verdict extraction
 src/fusion/          meta-scorer, SHAP engine
 scripts/             train_orchestrator.py (lazy ingestion, cross-fitting, OOF CV),
-                     fetch_modern_corpus.py (Nazario 2023-25 phishing + your benign mbox)
-tests/               306 tests, including tests/e2e/
+                     fetch_modern_corpus.py (research: SpamAssassin 2002-03 ham + Nazario 2004-07;
+                     real: Nazario 2023-25 + your benign mbox; synthetic smoke tests)
+tests/               310 tests, including tests/e2e/
 frontend/            React 19 + Vite + Tailwind + Three.js + React Flow dashboard
   src/pages/         LiveDetonation (/) and ThreatHistory (/history)
 docs/                CAPSTONE_PRESENTATION.md (12-min talk), CAPSTONE_DEFENSE.md (5-min talk + Q&A)

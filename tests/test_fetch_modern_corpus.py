@@ -146,3 +146,78 @@ def test_oversized_downloads_are_refused(fake_nazario: list[str], tmp_path: Path
     with pytest.raises(ValueError, match="refusing"):
         corpus.download_ceas_or_phishtank(1, out_dir=tmp_path / "modern")
     assert not list((tmp_path / "downloads").glob("*.mbox"))  # no truncated file left behind
+
+
+# --- research (era-matched) --------------------------------------------------------
+
+
+def _write_ham_tarball(path: Path, bodies: dict[str, str]) -> Path:
+    """A SpamAssassin-style .tar.bz2: one folder of numbered messages plus the 'cmds' file."""
+    import io
+    import tarfile
+
+    with tarfile.open(path, "w:bz2") as tar:
+        members = {**{f"easy_ham/{name}": body for name, body in bodies.items()}, "easy_ham/cmds": "mv 1 2\n"}
+        for name, body in members.items():
+            data = body.encode()
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return path
+
+
+def _ham(message_id: str, subject: str) -> str:
+    return f"From: list@lists.example\r\nMessage-ID: <{message_id}>\r\nSubject: {subject}\r\n\r\n{subject} body\r\n"
+
+
+def test_split_tarball_reads_in_memory_skips_cmds_and_dedupes_by_message_id(tmp_path: Path) -> None:
+    archive = _write_ham_tarball(
+        tmp_path / "ham.tar.bz2",
+        {
+            "00001.abc": _ham("one@x", "minutes"),
+            "00002.def": _ham("two@x", "release notes"),
+            # The 2003 sets re-release 2002 messages with small byte differences: same Message-ID.
+            "00003.ghi": _ham("ONE@x", "minutes (re-release)"),
+            "00004.jkl": "   ",
+        },
+    )
+    out, seen = tmp_path / "out", set[str]()
+
+    written, skipped = corpus.split_tarball(archive, out, prefix="2002", limit=10, seen=seen)
+
+    assert (written, skipped) == (2, 1)
+    assert sorted(p.name for p in out.iterdir()) == ["2002-00001.eml", "2002-00002.eml"]
+
+
+def test_research_fetch_builds_both_classes_and_survives_a_quarantined_mailbox(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ham = _write_ham_tarball(tmp_path / "src.tar.bz2", {"00001.a": _ham("h1@x", "hello"), "00002.b": _ham("h2@x", "lunch")})
+    phish = _write_mbox(tmp_path / "src.mbox", ["verify your account", "password expires"])
+    quarantined = corpus.NAZARIO_EARLY_MAILBOXES[1]
+
+    def fake_download(url: str, destination: Path) -> Path:
+        name = url.rsplit("/", 1)[1]
+        if name == quarantined:
+            raise OSError(22, "Invalid argument")  # what Windows reports for a file AV just removed
+        return ham if name.endswith(".tar.bz2") else phish
+
+    monkeypatch.setattr(corpus, "_download_with_retries", fake_download)
+    out = tmp_path / "research"
+
+    counts = corpus.fetch_research_corpus(out_dir=out)
+
+    assert counts["benign"] == 2 and counts["phishing"] == 2  # dedup collapses the repeated sources
+    assert counts["mailboxes_unavailable"] == 1
+    assert f"Skipped {quarantined}" in capsys.readouterr().out
+    assert "SpamAssassin" in (out / "ATTRIBUTION.txt").read_text("utf-8")
+    assert "CC BY 4.0" in (out / "ATTRIBUTION.txt").read_text("utf-8")
+
+
+def test_prune_invalid_drops_unusable_mail(tmp_path: Path) -> None:
+    (tmp_path / "benign").mkdir()
+    (tmp_path / "benign" / "good.eml").write_bytes(_ham("g@x", "fine").encode())
+    (tmp_path / "benign" / "headers-only.eml").write_bytes(b"Subject: no sender, no body\r\n\r\n")
+
+    assert corpus.prune_invalid(tmp_path) == (1, 1)
+    assert [p.name for p in (tmp_path / "benign").iterdir()] == ["good.eml"]

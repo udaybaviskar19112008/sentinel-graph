@@ -1,9 +1,16 @@
 """Build the modern training corpus and a separate synthetic smoke-test corpus.
 
+    python scripts/fetch_modern_corpus.py research             # -> data/raw/research/
     python scripts/fetch_modern_corpus.py synthetic            # -> data/raw/synthetic_2026/
     python scripts/fetch_modern_corpus.py real --limit 1000    # -> data/raw/modern_2026/
 
-The two never mix. ``real`` downloads hand-classified, modern phishing from Jose
+``research`` is the era-matched public corpus the reported metrics come from:
+SpamAssassin's legitimate mail (2002-03) against Nazario's early phishing
+(2004-07), both with intact Received chains. (Enron is unusable here: its public
+release strips Received headers, so every benign email would have no route and
+the route models would learn "has headers" instead of phishing.)
+
+Synthetic and modern never mix. ``real`` downloads hand-classified, modern phishing from Jose
 Nazario's public phishing corpus (CC-BY-4.0, attribution written alongside) and
 takes legitimate mail from an mbox you supply (``--benign-mbox``): no public
 archive of modern legitimate mail keeps full routing headers. ``synthetic`` writes
@@ -20,6 +27,9 @@ import logging
 import mailbox
 import random
 import sys
+import tarfile
+import time
+from email.parser import BytesHeaderParser
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
@@ -49,6 +59,34 @@ NAZARIO_ATTRIBUTION: Final = (
 MAX_DOWNLOAD_BYTES: Final = 64 * 1024 * 1024
 LABEL_FOLDERS: Final = {0: "benign", 1: "phishing"}
 
+RESEARCH_DIR: Final = PROJECT_ROOT / "data" / "raw" / "research"
+SPAMASSASSIN_BASE_URL: Final = "https://spamassassin.apache.org/old/publiccorpus/"
+SPAMASSASSIN_DOWNLOAD_DIR: Final = PROJECT_ROOT / "data" / "raw" / "downloads" / "spamassassin"
+# Legitimate mail, 2002-03. The 2003 sets re-release some 2002 messages; Message-ID dedup drops them.
+SPAMASSASSIN_HAM_ARCHIVES: Final = (
+    "20021010_easy_ham.tar.bz2",
+    "20021010_hard_ham.tar.bz2",
+    "20030228_easy_ham.tar.bz2",
+    "20030228_easy_ham_2.tar.bz2",
+    "20030228_hard_ham.tar.bz2",
+)
+# Phishing, 2004-07 (sampled Date headers). private-phishing4.mbox runs 2007-2015, so it is left out.
+NAZARIO_EARLY_MAILBOXES: Final = (
+    "phishing0.mbox",
+    "20051114.mbox",
+    "phishing1.mbox",
+    "phishing2.mbox",
+    "phishing3.mbox",
+)
+RESEARCH_ATTRIBUTION: Final = (
+    "Legitimate mail (benign/): SpamAssassin public corpus, easy_ham and hard_ham, 2002-10-10 and\n"
+    "2003-02-28 releases, https://spamassassin.apache.org/old/publiccorpus/\n\n"
+    + NAZARIO_ATTRIBUTION.replace("Phishing messages:", "Phishing messages (phishing/), 2004-2007 mailboxes:")
+    + "\nBoth sources were deduplicated by Message-ID and by content hash.\n"
+)
+MAX_MEMBER_BYTES: Final = 10 * 1024 * 1024
+DOWNLOAD_ATTEMPTS: Final = 3
+
 
 # --- real corpus ------------------------------------------------------------------------
 
@@ -75,6 +113,39 @@ def _download(url: str, destination: Path) -> Path:
     return destination
 
 
+def _download_with_retries(url: str, destination: Path) -> Path:
+    """``_download`` with a few retries on network errors (oversize refusals are not retried)."""
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            return _download(url, destination)
+        except requests.RequestException:
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise
+            time.sleep(2**attempt)
+    raise AssertionError("unreachable")
+
+
+def _message_id(raw: bytes) -> str | None:
+    try:
+        value = BytesHeaderParser().parsebytes(raw).get("Message-ID")
+    except Exception:  # a header block too broken to parse: fall back to the content hash
+        return None
+    if not value:
+        return None
+    return str(value).strip().lower() or None
+
+
+def _is_new(raw: bytes, seen: set[str]) -> bool:
+    """Record ``raw`` by content hash and Message-ID; False if either was seen before."""
+    keys = {f"sha256:{hashlib.sha256(raw).hexdigest()}"}
+    if message_id := _message_id(raw):
+        keys.add(f"mid:{message_id}")
+    if keys & seen:
+        return False
+    seen.update(keys)
+    return True
+
+
 def split_mbox(mbox_path: Path, out_dir: Path, *, prefix: str, limit: int, seen: set[str]) -> int:
     """Write each message of an mbox as ``<prefix>-NNNNN.eml``; return how many were new."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -85,15 +156,81 @@ def split_mbox(mbox_path: Path, out_dir: Path, *, prefix: str, limit: int, seen:
             if written >= limit:
                 break
             raw = box.get_bytes(key)
-            digest = hashlib.sha256(raw).hexdigest()
-            if digest in seen or not raw.strip():
+            if not raw.strip() or not _is_new(raw, seen):
                 continue
-            seen.add(digest)
             (out_dir / f"{prefix}-{index:05d}.eml").write_bytes(raw)
             written += 1
     finally:
         box.close()
     return written
+
+
+def split_tarball(archive: Path, out_dir: Path, *, prefix: str, limit: int, seen: set[str]) -> tuple[int, int]:
+    """Write each email in a SpamAssassin ``.tar.bz2`` as ``<prefix>-<name>.eml``.
+
+    Members are read in memory, never extracted, so archive paths cannot escape
+    ``out_dir``. Returns (written, skipped as corrupt or oversized).
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = skipped = 0
+    with tarfile.open(archive, "r:bz2") as tar:
+        for member in tar:
+            if written >= limit:
+                break
+            name = member.name.rsplit("/", 1)[-1]
+            if not member.isfile() or name == "cmds" or name.startswith("."):
+                continue
+            if member.size > MAX_MEMBER_BYTES:
+                skipped += 1
+                continue
+            try:
+                handle = tar.extractfile(member)
+                raw = handle.read() if handle else b""
+            except (tarfile.TarError, OSError):
+                skipped += 1
+                continue
+            if not raw.strip():
+                skipped += 1
+                continue
+            if not _is_new(raw, seen):
+                continue
+            (out_dir / f"{prefix}-{name.split('.', 1)[0]}.eml").write_bytes(raw)
+            written += 1
+    return written, skipped
+
+
+def fetch_research_corpus(limit: int = 0, *, out_dir: Path = RESEARCH_DIR) -> dict[str, int]:
+    """Populate ``out_dir`` with the era-matched corpus; ``limit`` caps each class (0 = all).
+
+    Corrupt archive members are skipped and counted, never fatal. Returns per-class counts.
+    """
+    cap = limit or sys.maxsize
+    seen: set[str] = set()
+    counts = {"benign": 0, "phishing": 0, "skipped": 0}
+    for name in SPAMASSASSIN_HAM_ARCHIVES:
+        if counts["benign"] >= cap:
+            break
+        archive = _download_with_retries(SPAMASSASSIN_BASE_URL + name, SPAMASSASSIN_DOWNLOAD_DIR / name)
+        written, skipped = split_tarball(
+            archive, out_dir / "benign", prefix=name.split(".", 1)[0], limit=cap - counts["benign"], seen=seen
+        )
+        counts["benign"] += written
+        counts["skipped"] += skipped
+    for name in NAZARIO_EARLY_MAILBOXES:
+        if counts["phishing"] >= cap:
+            break
+        try:
+            mbox_path = _download_with_retries(NAZARIO_BASE_URL + name, DOWNLOAD_DIR / name)
+            counts["phishing"] += split_mbox(
+                mbox_path, out_dir / "phishing", prefix=name.removesuffix(".mbox"), limit=cap - counts["phishing"], seen=seen
+            )
+        except OSError as exc:
+            # Real phishing archives trip antivirus: a quarantined mailbox vanishes or refuses to
+            # open mid-run. Skip it and say so; never weaken the scanner to get it back.
+            counts["mailboxes_unavailable"] = counts.get("mailboxes_unavailable", 0) + 1
+            print(f"Skipped {name}: {exc.strerror or exc} (quarantined by antivirus?)")
+    (out_dir / "ATTRIBUTION.txt").write_text(RESEARCH_ATTRIBUTION, encoding="utf-8")
+    return counts
 
 
 def download_ceas_or_phishtank(limit: int = 1000, *, benign_mbox: Path | None = None, out_dir: Path = MODERN_DIR) -> dict[str, int]:
@@ -364,9 +501,33 @@ def validate_corpus(root: Path) -> int:
     return checked
 
 
+def prune_invalid(root: Path) -> tuple[int, int]:
+    """Delete .eml files the production unpacker cannot read as an email; return (kept, removed).
+
+    Twenty-year-old mail has its share of truncated and header-only messages. They are
+    dropped here, silently apart from the count, rather than failing the whole fetch.
+    """
+    kept = removed = 0
+    for path in sorted(root.rglob("*.eml")):
+        try:
+            message, text, html, _ = unpack_email(path.read_bytes())
+            usable = bool(message.get("From") and (text or html))
+        except Exception:
+            usable = False
+        if usable:
+            kept += 1
+        else:
+            path.unlink()
+            removed += 1
+    return kept, removed
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
+    research = commands.add_parser("research", help="download the era-matched public corpus (~85 MB)")
+    research.add_argument("--limit", type=int, default=0, help="emails per class; 0 = all")
+    research.add_argument("--out", type=Path, default=RESEARCH_DIR)
     synthetic = commands.add_parser("synthetic", help="generate the smoke-test corpus (no network)")
     synthetic.add_argument("--count", type=int, default=1000)
     synthetic.add_argument("--seed", type=int, default=2026)
@@ -380,6 +541,13 @@ def main(argv: list[str] | None = None) -> int:
     # Real phishing is full of MIME defects; record them in the JSON log, not on the console.
     configure_logging(level=logging.WARNING)
     try:
+        if args.command == "research":
+            counts = fetch_research_corpus(args.limit, out_dir=args.out)
+            kept, removed = prune_invalid(args.out)
+            benign, phishing = (len(list((args.out / folder).glob("*.eml"))) for folder in ("benign", "phishing"))
+            print(f"Wrote {counts} under {args.out}")
+            print(f"Kept {kept} parseable emails (benign {benign}, phishing {phishing}); dropped {removed} unusable")
+            return 0
         if args.command == "synthetic":
             counts = generate_synthetic_corpus(args.out, count=args.count, seed=args.seed)
         else:

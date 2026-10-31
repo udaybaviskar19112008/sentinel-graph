@@ -11,6 +11,7 @@ from sklearn.model_selection import StratifiedKFold
 from torch_geometric.data import Data
 
 from scripts import train_orchestrator as orchestrator
+from src.core.config import get_settings
 from src.fusion.meta_scorer import FEATURE_NAMES, FusionMetaModel
 from src.topology.memae_model import GraphMemAE, normalized_adjacency
 from tests.synthetic_corpus import write_corpus
@@ -106,6 +107,16 @@ def test_training_writes_artifacts_the_runtime_loads_as_trained(
     assert report["emails"] == 20 and report["class_counts"] == {"benign": 10, "phishing": 10}
     assert 0.0 <= report["oof_roc_auc"] <= 1.0
     assert report["constant_features"] == VISION_AND_SLM
+    phishing = report["oof_phishing_at_0_5"]
+    assert set(phishing) == {"precision", "recall", "f1"} and all(0.0 <= v <= 1.0 for v in phishing.values())
+    assert "F1" in output
+    # One loss curve per fold: an entry per epoch, each [train, held-out benign] and both finite.
+    assert len(report["memae_loss_history"]) == report["folds"]
+    for history in report["memae_loss_history"]:
+        assert len(history) == report["memae_epochs"]
+        assert all(len(epoch) == 2 and all(np.isfinite(epoch)) for epoch in history)
+    for plot in ("roc_auc_curve.png", "training_loss.png"):
+        assert (models / plot).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
     meta = FusionMetaModel(models / "fusion_meta.joblib")
     memae = GraphMemAE(models / "topology" / "memae.pt")
@@ -145,6 +156,14 @@ def test_cross_fitted_losses_come_from_models_that_never_saw_the_email(
     for (_, valid_index), seen in zip(splits, seen_by_fold, strict=True):
         assert not seen & {id(dags[i]) for i in valid_index}  # scored emails were never trained on
         assert all(y[i] == 0 for i, dag in enumerate(dags) if id(dag) in seen)  # benign only
+
+
+def test_candidates_never_default_to_the_deployed_models_dir() -> None:
+    defaults = orchestrator.build_parser().parse_args([])
+
+    assert defaults.models_dir.name == "models_research"
+    assert defaults.models_dir != get_settings().MODELS_DIR
+    assert defaults.data_dir.name == "research"
 
 
 def test_single_class_corpus_is_rejected(tmp_path: Path) -> None:

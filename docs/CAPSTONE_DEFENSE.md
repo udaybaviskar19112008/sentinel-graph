@@ -17,7 +17,7 @@
 | MemAE | GCN 5→32→16 · memory 50×16 · τ = 0.1 · λ = 0.05 · zero-day threshold **0.913** (99th pct. of out-of-fold benign loss) |
 | Latency, laptop CPU | Tier 1 ≈ 60 ms · topology ≈ 90 ms · detonation ≈ 2.5 s · full assessment ≈ 4 s |
 | Sandbox bounds | 4 s navigation budget · hard deadline 2 × 4 s + 15 s start-up = **23 s** worst case |
-| Tests | **306 passed** (1 live-network test opt-in) |
+| Tests | **310 passed** (1 live-network test opt-in) |
 | Demo lure, trained models | risk **15/100** · `private_ip_leak` SHAP **−0.129** · MemAE loss **0.0003** |
 | Modern corpus | 1,000 phishing emails (Nazario 2023–25, CC-BY-4.0) · benign half pending |
 | Stand-ins (flagged on screen) | vision model · SLM (always answers CRITICAL) · globe positions for unlocatable hops |
@@ -107,7 +107,7 @@
 - MemAE models route *shape*: forged 3-hop route 0.0003 vs benign 1-hop + link 0.96
 - Modern corpus pipeline: 1,000 phishing (2023–25) downloaded; benign mailbox pending
 
-> **Speaker Notes:** Out of fold, the system reaches a ROC-AUC of 0.855, and every prediction comes from a model that never saw that email. I removed a label leak from the original plan that produced a perfect, meaningless score. Recall is weak, and SHAP shows why: on a modern lure, the private-IP feature *lowers* risk — most likely because private hops were common in 2002 legitimate corporate mail. And the graph model learned route length, not forgery. "Bootstrapping" here means building the dataset: the modern phishing half is downloaded; the benign half needs a consented mailbox export.
+> **Speaker Notes:** Out of fold, the system reaches a ROC-AUC of 0.855, and every prediction comes from a model that never saw that email. I removed a label leak from the original plan that produced a perfect, meaningless score. Recall is weak, and SHAP shows why: on a modern lure, the private-IP feature *lowers* risk — because two-thirds of the legitimate training mail is mailing-list traffic, which really does pass through private corporate relays. And the graph model learned route length, not forgery. "Bootstrapping" here means building the dataset: the modern phishing half is downloaded; the benign half needs a consented mailbox export.
 
 ---
 

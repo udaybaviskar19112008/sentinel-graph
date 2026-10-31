@@ -1,6 +1,12 @@
 """Offline training for the topology MemAE and the late-fusion meta-model.
 
-    python scripts/train_orchestrator.py --debug-slice 100            # data/raw/modern_2026
+    python scripts/train_orchestrator.py --debug-slice 100            # data/raw/research -> models_research/
+    python scripts/train_orchestrator.py --models-dir models          # promote: write where the app loads
+
+Candidates go to ``models_research/`` by default, so a run never replaces the
+deployed models in ``models/`` until it is compared and promoted on purpose. Each
+run also writes ``roc_auc_curve.png`` (out-of-fold ROC) and ``training_loss.png``
+(MemAE train vs held-out benign loss per epoch, one line pair per fold).
 
 Stage 7A streams a labelled corpus (``benign/`` and ``phishing/`` folders) lazily, alternating classes and holding
 only a bounded number of emails in flight, through the same extractors
@@ -35,7 +41,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import classification_report, precision_recall_fscore_support, roc_auc_score, roc_curve
 from sklearn.model_selection import StratifiedKFold
 from torch_geometric.data import Data
 from tqdm import tqdm
@@ -67,11 +73,14 @@ TRAINING_SLM_VERDICT: Final = VerdictLevel.SUSPICIOUS  # label-independent on pu
 MEMAE_LOSS_COLUMN: Final = FEATURE_NAMES.index("memae_loss")
 MEMAE_EPOCHS: Final = 5
 MEMAE_LEARNING_RATE: Final = 0.01
+MEMAE_MAX_GRAD_NORM: Final = 1.0
 ZERO_DAY_QUANTILE: Final = 0.99
 FOLDS: Final = 5
 SEED: Final = 42
 
 Example = tuple[npt.NDArray[np.float64], Data, int]
+# Per epoch: (mean training loss, mean held-out loss or None without a validation set).
+LossHistory = list[tuple[float, float | None]]
 
 
 # --- Stage 7A: ingestion ----------------------------------------------------------
@@ -181,8 +190,19 @@ def extract_features_concurrently(
 # --- Stage 7B: training -------------------------------------------------------------
 
 
-def train_memae(dags: list[Data], *, epochs: int = MEMAE_EPOCHS, seed: int = SEED) -> GraphMemAE:
-    """A fresh MemAE fitted to ``dags`` (benign routes) with Adam, one graph per step."""
+def train_memae(
+    dags: list[Data],
+    *,
+    epochs: int = MEMAE_EPOCHS,
+    seed: int = SEED,
+    validation: list[Data] | None = None,
+    history: LossHistory | None = None,
+) -> GraphMemAE:
+    """A fresh MemAE fitted to ``dags`` (benign routes) with Adam, one graph per step.
+
+    With ``history``, each epoch appends (mean training loss, mean anomaly loss on
+    ``validation``), so over- or under-fitting is visible instead of assumed.
+    """
     if not dags:
         raise ValueError("MemAE needs at least one benign graph to learn normal routing from")
     model = GraphMemAE(load_weights=False)
@@ -195,27 +215,55 @@ def train_memae(dags: list[Data], *, epochs: int = MEMAE_EPOCHS, seed: int = SEE
             optimizer.zero_grad()
             loss = model.reconstruction_loss(dags[index])
             loss.backward()  # type: ignore[no-untyped-call]  # torch leaves Tensor.backward unannotated
+            # One graph per step: without a cap, a single unusual route can throw the memory off
+            # (seen as folds diverging at epoch 4 on the research corpus).
+            torch.nn.utils.clip_grad_norm_(model.parameters(), MEMAE_MAX_GRAD_NORM)
             optimizer.step()
             epoch_loss += loss.item()
+        # compute_anomaly_loss scores in eval mode without autograd, then restores training mode.
+        held_out = float(np.mean([model.compute_anomaly_loss(dag) for dag in validation])) if validation else None
+        if history is not None:
+            history.append((epoch_loss / len(dags), held_out))
         logger.info(
             "MemAE epoch finished",
-            extra={"event": "training.memae_epoch", "epoch": epoch + 1, "mean_loss": epoch_loss / len(dags)},
+            extra={
+                "event": "training.memae_epoch",
+                "epoch": epoch + 1,
+                "mean_loss": epoch_loss / len(dags),
+                "validation_loss": held_out,
+            },
         )
     model.eval()
     return model
 
 
 def cross_fitted_memae_losses(
-    dags: list[Data], labels: npt.NDArray[np.int64], splits: list[tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]]
+    dags: list[Data],
+    labels: npt.NDArray[np.int64],
+    splits: list[tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]],
+    *,
+    epochs: int = MEMAE_EPOCHS,
+    histories: list[LossHistory] | None = None,
 ) -> npt.NDArray[np.float64]:
     """Each email's anomaly loss from a MemAE trained on the other folds' benign emails.
 
     Scoring benign emails with a MemAE that trained on them would make them look
     unusually normal: a label leak the meta-model would learn instead of the topology.
+    With ``histories``, each fold's loss curve is recorded, validated on that fold's
+    held-out benign emails (the same split, so it costs no extra data).
     """
     losses = np.zeros(len(dags), dtype=np.float64)
     for fold, (train_index, valid_index) in enumerate(splits):
-        model = train_memae([dags[i] for i in train_index if labels[i] == 0], seed=SEED + fold)
+        history: LossHistory = []
+        model = train_memae(
+            [dags[i] for i in train_index if labels[i] == 0],
+            epochs=epochs,
+            seed=SEED + fold,
+            validation=[dags[i] for i in valid_index if labels[i] == 0] if histories is not None else None,
+            history=history,
+        )
+        if histories is not None:
+            histories.append(history)
         for i in valid_index:
             losses[i] = model.compute_anomaly_loss(dags[i])
     return losses
@@ -225,11 +273,59 @@ def _forest() -> RandomForestClassifier:
     return RandomForestClassifier(n_estimators=100, max_depth=6, random_state=SEED, n_jobs=-1)
 
 
+def _pyplot() -> Any:
+    # Imported on first plot only, with a file-only backend: no display needed (CI, servers).
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    return plt
+
+
+def plot_roc_curve(y_labels: npt.NDArray[np.int64], scores: npt.NDArray[np.float64], auc: float, path: Path) -> None:
+    """The out-of-fold ROC curve, with the 0.5 operating point marked."""
+    plt = _pyplot()
+    fpr, tpr, thresholds = roc_curve(y_labels, scores)
+    at_half = int(np.argmin(np.abs(thresholds - 0.5)))
+    fig, ax = plt.subplots(figsize=(5.5, 5))
+    ax.plot(fpr, tpr, color="#0072b2", linewidth=2, label=f"Fusion model, out-of-fold (AUC = {auc:.3f})")
+    ax.plot([0, 1], [0, 1], color="grey", linestyle="--", linewidth=1, label="Chance")
+    ax.scatter([fpr[at_half]], [tpr[at_half]], color="#d55e00", zorder=3, label="Threshold 0.5")
+    ax.set(xlabel="False positive rate", ylabel="True positive rate", xlim=(0, 1), ylim=(0, 1.01),
+           title=f"ROC, {len(y_labels)} emails, stratified CV")
+    ax.legend(loc="lower right")
+    ax.grid(alpha=0.3)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_training_loss(histories: list[LossHistory], path: Path) -> None:
+    """MemAE mean BCE per epoch: training (solid) and held-out benign (dashed), one colour per fold."""
+    plt = _pyplot()
+    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    colours = plt.get_cmap("tab10")
+    for fold, history in enumerate(histories):
+        epochs = range(1, len(history) + 1)
+        ax.plot(epochs, [train for train, _ in history], color=colours(fold), label=f"Fold {fold + 1} train")
+        validation = [held_out for _, held_out in history]
+        if all(value is not None for value in validation):
+            ax.plot(epochs, validation, color=colours(fold), linestyle="--", label=f"Fold {fold + 1} validation")
+    ax.set(xlabel="Epoch", ylabel="Mean reconstruction BCE", title="MemAE loss on benign routes")
+    ax.xaxis.get_major_locator().set_params(integer=True)
+    ax.legend(fontsize="small", ncol=2)
+    ax.grid(alpha=0.3)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def train_and_export(
     X_meta_arrays: npt.NDArray[np.float64],
     dag_list: list[Data],
     y_labels: npt.NDArray[np.int64],
     models_dir: Path,
+    *,
+    memae_epochs: int = MEMAE_EPOCHS,
 ) -> dict[str, Any]:
     """Cross-validate, fit on everything, write the runtime artifacts; return the training report."""
     class_counts = np.bincount(y_labels, minlength=2)
@@ -239,7 +335,8 @@ def train_and_export(
     splits = list(StratifiedKFold(n_splits=folds, shuffle=True, random_state=SEED).split(X_meta_arrays, y_labels))
 
     features = X_meta_arrays.copy()
-    losses = cross_fitted_memae_losses(dag_list, y_labels, splits)
+    histories: list[LossHistory] = []
+    losses = cross_fitted_memae_losses(dag_list, y_labels, splits, epochs=memae_epochs, histories=histories)
     features[:, MEMAE_LOSS_COLUMN] = losses
     # Out-of-fold, so this is how unseen *benign* routes score: 1% of normal mail exceeds it.
     zero_day_threshold = float(np.quantile(losses[y_labels == 0], ZERO_DAY_QUANTILE))
@@ -252,10 +349,22 @@ def train_and_export(
     report = classification_report(
         y_labels, (oof >= 0.5).astype(int), target_names=["benign", "phishing"], digits=3, zero_division=0
     )
-    print(f"\nOut-of-fold ROC AUC ({folds}-fold stratified): {auc:.4f}\n{report}")
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        y_labels, (oof >= 0.5).astype(int), average="binary", pos_label=1, zero_division=0
+    )
+    print(f"\nOut-of-fold ROC AUC ({folds}-fold stratified): {auc:.4f}")
+    print(f"Phishing @ 0.5: precision {precision:.3f} · recall {recall:.3f} · F1 {f1:.3f}\n{report}")
+
+    models_dir.mkdir(parents=True, exist_ok=True)
+    roc_path = models_dir / "roc_auc_curve.png"
+    loss_path = models_dir / "training_loss.png"
+    plot_roc_curve(y_labels, oof, auc, roc_path)
+    plot_training_loss(histories, loss_path)
 
     final_forest = _forest().fit(features, y_labels)
-    final_memae = train_memae([dag for dag, label in zip(dag_list, y_labels, strict=True) if label == 0])
+    final_memae = train_memae(
+        [dag for dag, label in zip(dag_list, y_labels, strict=True) if label == 0], epochs=memae_epochs
+    )
     final_memae.zero_day_threshold = zero_day_threshold
     meta_path = models_dir / "fusion_meta.joblib"
     memae_path = models_dir / "topology" / "memae.pt"
@@ -277,6 +386,11 @@ def train_and_export(
         "class_counts": {"benign": int(class_counts[0]), "phishing": int(class_counts[1])},
         "folds": folds,
         "oof_roc_auc": auc,
+        # The phishing class at the runtime's 0.5 threshold, out of fold.
+        "oof_phishing_at_0_5": {"precision": float(precision), "recall": float(recall), "f1": float(f1)},
+        "memae_epochs": memae_epochs,
+        # Per fold, per epoch: [mean training loss, mean held-out benign loss].
+        "memae_loss_history": [[list(epoch) for epoch in history] for history in histories],
         "memae_zero_day_threshold": zero_day_threshold,
         "feature_names": list(FEATURE_NAMES),
         # Features with one value in training: the model cannot have learned to use them.
@@ -285,24 +399,42 @@ def train_and_export(
             "fusion_meta": str(meta_path),
             "memae": str(memae_path),
             "memae_onnx": str(onnx_path) if onnx_path else None,
+            "roc_curve": str(roc_path),
+            "training_loss": str(loss_path),
         },
     }
     (models_dir / "training_report.json").write_text(json.dumps(training_report, indent=2), encoding="utf-8")
     return training_report
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     settings = get_settings()
     parser = argparse.ArgumentParser(description="Train MemAE and the fusion meta-model on a labelled corpus.")
     parser.add_argument("--debug-slice", type=int, default=0, help="only the first N emails (classes alternate); 0 = all")
-    parser.add_argument("--data-dir", type=Path, default=settings.BASE_DIR / "data" / "raw" / "modern_2026")
-    parser.add_argument("--models-dir", type=Path, default=settings.MODELS_DIR, help="where the runtime loads models")
+    parser.add_argument("--data-dir", type=Path, default=settings.BASE_DIR / "data" / "raw" / "research")
+    parser.add_argument(
+        "--models-dir",
+        type=Path,
+        default=settings.BASE_DIR / "models_research",
+        help=f"where candidates are written (default models_research/; the app loads {settings.MODELS_DIR})",
+    )
+    parser.add_argument("--memae-epochs", type=int, default=MEMAE_EPOCHS, help="MemAE epochs per fit")
     parser.add_argument("--extract-only", action="store_true", help="run Stage 7A and stop")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
     if args.debug_slice < 0:
         parser.error("--debug-slice must be >= 0")
+    if args.memae_epochs < 1:
+        parser.error("--memae-epochs must be >= 1")
     if not args.data_dir.is_dir():
-        parser.error(f"corpus not found at {args.data_dir} (expected benign/ and phishing/ folders; see scripts/fetch_modern_corpus.py)")
+        parser.error(
+            f"corpus not found at {args.data_dir} (expected benign/ and phishing/ folders; "
+            "run `python scripts/fetch_modern_corpus.py research`)"
+        )
 
     configure_logging(level=logging.WARNING)
     try:
@@ -312,7 +444,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.extract_only or not y_labels:
             return 0
         report = train_and_export(
-            np.vstack(X_meta_arrays), dag_list, np.asarray(y_labels, dtype=np.int64), args.models_dir
+            np.vstack(X_meta_arrays),
+            dag_list,
+            np.asarray(y_labels, dtype=np.int64),
+            args.models_dir,
+            memae_epochs=args.memae_epochs,
         )
         print(f"Artifacts written to {args.models_dir}: {json.dumps(report['artifacts'])}")
         if report["constant_features"]:

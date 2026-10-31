@@ -178,10 +178,15 @@ class GraphMemAE(nn.Module):
         excluded because they only measure latent norm. This is the training objective.
         """
         num_nodes = int(dag.num_nodes)
-        probabilities, _ = self(dag.x, dag.edge_index)
+        rebuilt = self.address(self.encode(dag.x, dag.edge_index)) @ self.memory
+        logits = rebuilt @ rebuilt.t()  # decode() is sigmoid(logits)
         target = _dense_undirected_adjacency(dag.edge_index, num_nodes)
         off_diagonal = ~torch.eye(num_nodes, dtype=torch.bool)
-        return F.binary_cross_entropy(probabilities[off_diagonal].clamp(_EPS, 1 - _EPS), target[off_diagonal])
+        # BCE on logits, not on clamped probabilities: equal wherever sigmoid is not saturated,
+        # but a clamp has zero gradient once saturated, so a model that drifted there could never
+        # recover (training loss climbed to the clamp's ceiling, -ln(1e-12) = 27.6, on the
+        # research corpus). The log-sum-exp form keeps the gradient alive.
+        return F.binary_cross_entropy_with_logits(logits[off_diagonal], target[off_diagonal])
 
     def compute_anomaly_loss(self, dag: Data) -> float:
         """``reconstruction_loss`` as an anomaly score; higher is stranger. Runs without autograd."""
