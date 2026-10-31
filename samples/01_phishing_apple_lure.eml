@@ -1,0 +1,30 @@
+Received: from mx-edge.corp.example (mx-edge.corp.example [40.107.22.55])
+	by inbox.corp.example with ESMTPS id 9F2C1; Tue, 06 Oct 2026 10:02:50 +0000
+Received: from relay.bulk-sender.invalid (relay.bulk-sender.invalid [194.26.29.10])
+	by mx-edge.corp.example with ESMTPS id 5E77A; Tue, 06 Oct 2026 10:02:41 +0000
+Received: from internal.bulk-sender.invalid (internal [10.0.0.1])
+	by relay.bulk-sender.invalid with ESMTP id 7A11B; Tue, 06 Oct 2026 09:55:12 +0000
+Received: from kit.bulk-sender.invalid (unknown [185.220.101.4])
+	by internal.bulk-sender.invalid with ESMTP id 3C0DE; Tue, 06 Oct 2026 10:01:03 +0000
+Authentication-Results: mx-edge.corp.example;
+	spf=fail (sender IP is 185.220.101.4) smtp.mailfrom=apple-id-support.invalid;
+	dkim=none (message not signed) header.d=none;
+	dmarc=fail action=reject header.from=apple-id-support.invalid
+From: "Apple Support" <security@apple-id-support.invalid>
+Reply-To: billing@collector.invalid
+To: victim@corp.example
+Subject: =?utf-8?b?WW91ciBBcHBsZSBJRCBoYXMgYmVlbiBsb2NrZWQ=?=
+Date: Tue, 06 Oct 2026 10:01:00 +0000
+Message-ID: <e2e-phish-0001@apple-id-support.invalid>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+Your Apple ID is locked. Verify at https://secure-apple-id.invalid/login
+--b1
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Your Apple ID is locked.</p><a href="https://secure-apple-id.invalid/login">Verify now</a></body></html>
+--b1--

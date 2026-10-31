@@ -1,0 +1,17 @@
+Received: from relay2.example.org (relay2.example.org [185.199.108.153])
+	by mx.example.test with ESMTPS id 4C2D1; Sat, 31 Oct 2026 12:00:04 +0000
+Received: from relay1.example.net (relay1.example.net [1.1.1.1])
+	by relay2.example.org with ESMTP id 3B1C0; Sat, 31 Oct 2026 12:00:03 +0000
+Received: from origin.example.com (origin.example.com [8.8.8.8])
+	by relay1.example.net with ESMTP id 2A0B9; Sat, 31 Oct 2026 12:00:02 +0000
+Authentication-Results: mx.example.test; spf=fail smtp.mailfrom=billing-desk.invalid;
+	dkim=none; dmarc=fail header.from=billing-desk.invalid
+From: "Accounts Payable" <ap@billing-desk.invalid>
+To: finance@corp.example
+Subject: Final notice: account suspension
+Date: Sat, 31 Oct 2026 12:00:00 +0000
+Message-ID: <demo-coercive-0003@billing-desk.invalid>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Your account has been suspended. Immediate action is required: verify your identity before the final notice expires.</p><p><a href="https://login.xkqjfhzyw.invalid/verify">Restore access</a></p></body></html>
