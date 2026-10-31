@@ -66,7 +66,7 @@ export function Dropzone({ onFile, className }: { onFile: (file: File) => void; 
       <input
         ref={inputRef}
         type="file"
-        accept=".eml,.msg,.txt,message/rfc822"
+        accept=".eml,.txt,message/rfc822"
         className="hidden"
         onClick={(event) => event.stopPropagation()}
         onChange={(event) => {
