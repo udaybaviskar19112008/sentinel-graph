@@ -2,42 +2,71 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-  /* Tactical HUD layer: a 1px graphite line every 40px on both axes. */
-  .bg-cyber-grid {
-    background-image:
-      linear-gradient(to right, theme('colors.cyber-grid') 1px, transparent 1px),
-      linear-gradient(to bottom, theme('colors.cyber-grid') 1px, transparent 1px);
-    background-size: 40px 40px;
+@layer components {
+  /* Frosted glass floating over the animated backdrop and the globe. */
+  .glass-panel {
+    @apply rounded-3xl border border-glass-border bg-glass-base shadow-2xl backdrop-blur-2xl;
   }
 }
 
-@layer components {
-  .glass-panel {
-    @apply rounded-xl border border-white/10 bg-cyber-panel backdrop-blur-lg;
-  }
-
-  /* React Flow ships light controls; restyle them for the HUD. */
-  .react-flow .react-flow__controls-button {
-    @apply border-b-white/10 bg-cyber-panel fill-white backdrop-blur-lg hover:bg-cyber-accent/20;
-  }
-  .react-flow .react-flow__attribution {
-    @apply bg-transparent;
-  }
-  .react-flow .react-flow__attribution a {
-    @apply text-white/30;
-  }
+/*
+ * React Flow ships light controls; restyle them as glass. Deliberately outside @layer:
+ * Tailwind drops layered rules whose class names never appear in our source, and React
+ * Flow adds these class names at runtime, so a layered override silently vanished.
+ */
+.react-flow .react-flow__controls-button {
+  @apply border-b-glass-border bg-glass-base fill-stone-200 backdrop-blur-lg hover:bg-glass-highlight;
+}
+.react-flow .react-flow__attribution {
+  @apply bg-transparent;
+}
+.react-flow .react-flow__attribution a {
+  @apply text-stone-500;
 }
 
 @layer base {
   :root {
-    color-scheme: dark; /* native scrollbars and form controls match the HUD */
+    color-scheme: dark; /* native scrollbars and form controls match the UI */
+  }
+
+  /* Lock the app to the viewport: the WebGL canvas sizes itself to this box, and nothing scrolls. */
+  html,
+  body,
+  #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
   }
 
   body {
-    @apply bg-cyber-grid;
     background-color: theme('colors.cyber-bg');
-    color: white;
-    overflow: hidden;
+    color: theme('colors.stone.300');
+  }
+
+  /*
+   * Stone -> rose -> stone, panned slowly. An oversized fixed layer moved by transform:
+   * the compositor animates it without repainting the page every frame.
+   */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: -25%;
+    z-index: -1;
+    pointer-events: none;
+    background-image: linear-gradient(
+      to bottom right,
+      theme('colors.stone.800'),
+      theme('colors.rose.950 / 20%'),
+      theme('colors.stone.900')
+    );
+    @apply animate-gradient-pan;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body::before {
+      animation: none;
+    }
   }
 }

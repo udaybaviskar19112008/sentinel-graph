@@ -78,7 +78,7 @@ export function TopologyMap() {
         <Controls showInteractive={false} />
       </ReactFlow>
       {graphNodes.length === 0 && (
-        <p className="pointer-events-none absolute inset-0 grid place-items-center font-mono text-xs uppercase tracking-[0.3em] text-white/30">
+        <p className="pointer-events-none absolute inset-0 grid place-items-center font-mono text-xs uppercase tracking-[0.3em] text-stone-500">
           Drop an email to map its delivery route
         </p>
       )}

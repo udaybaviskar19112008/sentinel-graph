@@ -29,12 +29,12 @@ export function ThreatNode({ data }: NodeProps<NodeData>) {
   return (
     <div
       className={cn(
-        'w-44 rounded-lg border bg-[rgba(15,20,25,0.85)] px-3 py-2 font-mono text-[11px] text-white backdrop-blur',
+        'w-44 rounded-lg border bg-stone-900/85 px-3 py-2 font-mono text-[11px] text-white backdrop-blur',
         KIND_BORDER[data.kind],
       )}
     >
       <Handle type="target" position={isUrl ? Position.Left : Position.Top} className="!border-0 !bg-white/40" />
-      <span className="block text-[9px] uppercase tracking-[0.25em] text-white/40">{KIND_LABEL[data.kind]}</span>
+      <span className="block text-[9px] uppercase tracking-[0.25em] text-stone-400">{KIND_LABEL[data.kind]}</span>
       <span className="block [overflow-wrap:anywhere]">{data.label}</span>
       {!isUrl && data.kind !== 'RECEIVER' && (
         <Handle type="source" id={ROUTE_HANDLE} position={Position.Bottom} className="!border-0 !bg-white/40" />

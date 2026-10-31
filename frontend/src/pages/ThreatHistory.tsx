@@ -28,14 +28,14 @@ const SHOWN_INDICATORS = 3
 
 const VERDICT_BADGE: Record<VerdictLevel, string> = {
   BENIGN: 'bg-cyber-safe/20 text-cyber-safe border-cyber-safe',
-  SUSPICIOUS: 'bg-cyber-accent/10 text-cyber-accent border-cyber-accent/60',
+  SUSPICIOUS: 'bg-cyber-warning/10 text-cyber-warning border-cyber-warning/60',
   PHISHING: 'bg-cyber-alert/10 text-cyber-alert border-cyber-alert/60',
   CRITICAL: 'bg-cyber-alert/20 text-cyber-alert border-cyber-alert',
 }
 
 function riskColor(risk: number): string {
   if (risk >= 75) return 'text-cyber-alert'
-  if (risk >= 40) return 'text-cyber-accent'
+  if (risk >= 40) return 'text-cyber-warning'
   return 'text-cyber-safe'
 }
 
@@ -48,7 +48,7 @@ async function fetchScans(signal: AbortSignal): Promise<Scan[]> {
 const timestampFormat =new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
 
 function Indicators({ indicators }: { indicators: Indicator[] }) {
-  if (indicators.length === 0) return <span className="text-white/30">none</span>
+  if (indicators.length === 0) return <span className="text-stone-500">none</span>
   const hidden = indicators.length - SHOWN_INDICATORS
   return (
     <ul className="flex flex-wrap gap-1" title={indicators.map((i) => `${i.type}: ${i.value}`).join('\n')}>
@@ -57,14 +57,14 @@ function Indicators({ indicators }: { indicators: Indicator[] }) {
           key={`${indicator.type}:${indicator.value}`}
           className={cn(
             'max-w-[16rem] truncate rounded border px-1.5 py-0.5 font-mono text-[11px]',
-            indicator.malicious_flag ? 'border-cyber-alert/50 text-cyber-alert' : 'border-white/10 text-white/60',
+            indicator.malicious_flag ? 'border-cyber-alert/50 text-cyber-alert' : 'border-glass-border text-stone-400',
           )}
         >
-          <span className="text-white/40">{indicator.type} </span>
+          <span className="text-stone-500">{indicator.type} </span>
           {indicator.value}
         </li>
       ))}
-      {hidden > 0 && <li className="px-1 py-0.5 text-[11px] text-white/40">+{hidden} more</li>}
+      {hidden > 0 && <li className="px-1 py-0.5 text-[11px] text-stone-500">+{hidden} more</li>}
     </ul>
   )
 }
@@ -102,9 +102,9 @@ export function ThreatHistory() {
   }
 
   return (
-    <div className="pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-cyber-panel/50 p-6 backdrop-blur-xl">
-      <header className="mb-4 flex items-center justify-between border-b border-cyber-accent/60 pb-3 shadow-[0_8px_16px_-12px_rgba(0,240,255,0.7)]">
-        <h1 className="font-mono text-lg uppercase tracking-[0.25em] text-cyber-accent">
+    <div className="glass-panel pointer-events-auto flex h-full w-full flex-col overflow-hidden p-6">
+      <header className="mb-4 flex items-center justify-between border-b border-cyber-accent/40 pb-3 shadow-[0_8px_16px_-12px_rgba(240,171,252,0.45)]">
+        <h1 className="font-mono text-lg uppercase tracking-[0.25em] text-white">
           Global Threat Intelligence Log
         </h1>
         <button
@@ -112,7 +112,7 @@ export function ThreatHistory() {
           onClick={refresh}
           disabled={loading}
           aria-label="Refresh scan history"
-          className="flex items-center gap-2 rounded-md border border-white/10 px-3 py-1.5 text-xs uppercase tracking-widest text-white/70 transition-colors hover:border-cyber-accent/60 hover:text-cyber-accent disabled:opacity-50"
+          className="flex items-center gap-2 rounded-md border border-glass-border px-3 py-1.5 text-xs uppercase tracking-widest text-stone-300 transition-colors hover:border-cyber-accent/60 hover:text-cyber-accent disabled:opacity-50"
         >
           <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} aria-hidden="true" />
           Refresh
@@ -127,7 +127,7 @@ export function ThreatHistory() {
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="sticky top-0 bg-cyber-bg/90 text-[10px] uppercase tracking-[0.2em] text-white/50 backdrop-blur">
+          <thead className="sticky top-0 bg-cyber-bg/90 text-[10px] uppercase tracking-[0.2em] text-stone-400 backdrop-blur">
             <tr>
               <th className="px-3 py-2 font-normal">Timestamp</th>
               <th className="px-3 py-2 font-normal">Target subject</th>
@@ -139,14 +139,14 @@ export function ThreatHistory() {
           <tbody>
             {scans.map((scan) => (
               <tr key={scan.id} className="border-b border-white/5 align-top transition-colors hover:bg-white/5">
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-white/60">
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-stone-400">
                   {timestampFormat.format(new Date(scan.timestamp))}
                 </td>
                 <td className="max-w-md px-3 py-2">
                   <p className="truncate" title={scan.subject ?? undefined}>
-                    {scan.subject ?? <span className="text-white/30">(no subject)</span>}
+                    {scan.subject ?? <span className="text-stone-500">(no subject)</span>}
                   </p>
-                  {scan.sender && <p className="truncate text-xs text-white/40">{scan.sender}</p>}
+                  {scan.sender && <p className="truncate text-xs text-stone-400">{scan.sender}</p>}
                 </td>
                 <td className="px-3 py-2">
                   <span
@@ -169,7 +169,7 @@ export function ThreatHistory() {
           </tbody>
         </table>
         {!loading && !error && scans.length === 0 && (
-          <p className="py-10 text-center text-sm text-white/40">No scans recorded yet. Analyse an email to start the log.</p>
+          <p className="py-10 text-center text-sm text-stone-400">No scans recorded yet. Analyse an email to start the log.</p>
         )}
       </div>
     </div>

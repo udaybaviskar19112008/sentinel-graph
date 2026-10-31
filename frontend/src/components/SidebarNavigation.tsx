@@ -18,7 +18,7 @@ export function SidebarNavigation() {
     <div className="pointer-events-auto relative z-20 w-16 shrink-0">
       <nav
         aria-label="Primary"
-        className="group absolute inset-y-0 left-0 flex w-16 flex-col gap-2 overflow-hidden border-r border-white/10 bg-cyber-panel px-3 py-4 backdrop-blur-md transition-all duration-200 focus-within:w-48 hover:w-48"
+        className="group absolute inset-y-0 left-0 flex w-16 flex-col gap-2 overflow-hidden border-r border-glass-border bg-glass-base px-3 py-4 shadow-2xl backdrop-blur-2xl transition-all duration-200 focus-within:w-48 hover:w-48"
       >
         {LINKS.map(({ to, label, icon: Icon }) => (
           <NavLink
@@ -27,7 +27,7 @@ export function SidebarNavigation() {
             end
             className={({ isActive }) =>
               cn(
-                'flex h-10 items-center gap-3 rounded-lg px-2 text-white/60 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyber-accent',
+                'flex h-10 items-center gap-3 rounded-lg px-2 text-stone-400 transition-colors hover:bg-glass-base hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyber-accent',
                 isActive && 'bg-cyber-accent/10 text-cyber-accent hover:text-cyber-accent',
               )
             }

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { type SocketStatus, useThreatStore } from '@/store/useThreatStore'
 
 const STATUS_DOT: Record<SocketStatus, string> = {
-  disconnected: 'bg-white/30',
+  disconnected: 'bg-stone-500',
   connecting: 'bg-cyber-accent animate-pulse',
   connected: 'bg-cyber-safe animate-pulse',
 }
@@ -57,9 +57,9 @@ export function Dropzone({ onFile, className }: { onFile: (file: File) => void; 
         className,
       )}
     >
-      <Upload className={cn('h-6 w-6', dragging ? 'text-cyber-accent' : 'text-white/60')} aria-hidden="true" />
-      <p className="text-sm text-white/80">Drop a raw email (.eml) or click to browse</p>
-      <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-white/50">
+      <Upload className={cn('h-6 w-6', dragging ? 'text-cyber-accent' : 'text-stone-400')} aria-hidden="true" />
+      <p className="text-sm text-stone-300">Drop a raw email (.eml) or click to browse</p>
+      <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-stone-400">
         <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[socketStatus])} aria-hidden="true" />
         {socketStatus} · {phase}
       </p>
