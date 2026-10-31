@@ -16,6 +16,7 @@ from src.cognitive.slm_inference import DUMMY_REASONING
 from src.core.database import init_db, make_engine
 from src.core.logger import LOG_FILE_NAME, configure_logging, shutdown_logging
 from src.core.orchestrator import AnalysisEngines, stream_analysis_pipeline
+from src.forensics.dga_detector import calculate_shannon_entropy
 from src.models.db_models import EmailScanRecord, IndicatorType
 from src.schemas import ThreatAssessment
 from tests.factories import LURE_URL, StubSandbox, noise_png, phishing_email
@@ -69,6 +70,10 @@ async def test_complete_payload_is_a_valid_threat_assessment(engines: AnalysisEn
     header = assessment.header_forensics
     assert (header.spf, header.dmarc, header.impersonated_brand) == ("fail", "fail", "apple")
     assert header.private_ip_leak is True and header.route_hop_count == 3
+    # Content heuristics: the lure's label is "evil" (.example has no public suffix) and the
+    # body uses none of the coercive phrases.
+    assert header.dga_max_entropy == calculate_shannon_entropy("evil")
+    assert header.nlp_urgency_score == 0.0
     assert assessment.vision_forensics is not None
     assert assessment.vision_forensics.screenshot_hash == hashlib.sha256(noise_png()).hexdigest()
     assert assessment.topology_forensics is not None
@@ -232,3 +237,13 @@ async def test_no_session_means_no_history(engines: AnalysisEngines) -> None:
     _, sink = await _run(engines)
 
     assert sink.events[-1]["scan_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_coercive_wording_reaches_tier_1_and_the_assessment(engines: AnalysisEngines) -> None:
+    raw = phishing_email().replace(b"Your Apple ID is locked.", b"Your account has been suspended. Final notice.")
+
+    assessment, sink = await _run(engines, raw)
+
+    tier_1 = sink.events[1]["findings"]
+    assert tier_1["nlp_urgency_score"] == 0.5 == assessment.header_forensics.nlp_urgency_score

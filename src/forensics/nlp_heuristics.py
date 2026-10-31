@@ -44,6 +44,11 @@ def _fold(text: str) -> str:
     return " ".join("".join(char for char in folded if unicodedata.category(char) != "Cf").split())
 
 
+def visible_text(html: str) -> str:
+    """The text a reader sees in an HTML part (tags dropped); "" for no HTML."""
+    return BeautifulSoup(html, "html.parser").get_text(" ") if html else ""
+
+
 class CoercionAnalyzer:
     """Urgency score in [0, 1]: 0.25 per coercive phrase, capped at 1.0 (four phrases)."""
 
@@ -56,11 +61,11 @@ class CoercionAnalyzer:
             return 0.0
         return min(1.0, len(self._pattern.findall(_fold(email_body))) * POINTS_PER_MATCH)
 
-    def score_parts(self, text: str, html: str) -> float:
-        """The higher urgency of the plain-text part and the HTML part's visible text.
+    def score_parts(self, text: str, visible_html: str) -> float:
+        """The higher urgency of the plain-text part and the HTML part's ``visible_text``.
 
         The higher, not the sum: multipart/alternative carries one message twice, and a
-        harmless plain-text decoy must not hide a coercive HTML part.
+        harmless plain-text decoy must not hide a coercive HTML part. Takes the visible
+        text rather than the HTML so a caller that already extracted it parses once.
         """
-        visible_html = BeautifulSoup(html, "html.parser").get_text(" ") if html else ""
         return max(self.calculate_urgency_score(text), self.calculate_urgency_score(visible_html))

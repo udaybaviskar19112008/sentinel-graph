@@ -12,13 +12,12 @@ from torch_geometric.data import Data
 
 from scripts import train_orchestrator as orchestrator
 from src.core.config import get_settings
+from src.forensics.dga_detector import calculate_shannon_entropy
 from src.fusion.meta_scorer import FEATURE_NAMES, N_FEATURES, FusionMetaModel
 from src.topology.memae_model import GraphMemAE, normalized_adjacency
 from tests.synthetic_corpus import write_corpus
 
 VISION_AND_SLM = ["screenshot_hash_exists", "visual_spoof_score", "is_cred_harvester", "slm_verdict_severity"]
-# The trainer does not compute the content heuristics yet, so they are still constant zero.
-NOT_YET_EXTRACTED = ["dga_max_entropy", "nlp_urgency_score"]
 
 
 @pytest.fixture(scope="module")
@@ -108,7 +107,7 @@ def test_training_writes_artifacts_the_runtime_loads_as_trained(
     report = json.loads((models / "training_report.json").read_text("utf-8"))
     assert report["emails"] == 20 and report["class_counts"] == {"benign": 10, "phishing": 10}
     assert 0.0 <= report["oof_roc_auc"] <= 1.0
-    assert report["constant_features"] == VISION_AND_SLM + NOT_YET_EXTRACTED
+    assert report["constant_features"] == VISION_AND_SLM  # the content heuristics now vary
     phishing = report["oof_phishing_at_0_5"]
     assert set(phishing) == {"precision", "recall", "f1"} and all(0.0 <= v <= 1.0 for v in phishing.values())
     assert "F1" in output
@@ -180,3 +179,17 @@ def test_missing_corpus_is_a_usage_error(tmp_path: Path) -> None:
         orchestrator.main(["--data-dir", str(tmp_path / "nope")])
 
     assert exit_info.value.code == 2
+
+
+def test_training_rows_carry_the_content_heuristics(corpus: Path) -> None:
+    # Classes alternate, so the second email is spam 0: links to login-0.example.ru, and its
+    # body (unlike its Subject) says the account has been suspended.
+    (_, _), (spam_raw, spam_label) = itertools.islice(orchestrator.corpus_generator(corpus), 2)
+
+    result = orchestrator.process_single_email(spam_raw, spam_label)
+
+    assert result is not None
+    row, _, label = result
+    assert label == 1
+    assert row[FEATURE_NAMES.index("dga_max_entropy")] == pytest.approx(calculate_shannon_entropy("example"))
+    assert row[FEATURE_NAMES.index("nlp_urgency_score")] == 0.25

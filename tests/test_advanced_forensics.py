@@ -4,7 +4,7 @@ import pytest
 
 from src.core.domains import registrable_label
 from src.forensics.dga_detector import analyze_dga_risk, calculate_shannon_entropy
-from src.forensics.nlp_heuristics import SCAN_WINDOW_CHARS, CoercionAnalyzer
+from src.forensics.nlp_heuristics import SCAN_WINDOW_CHARS, CoercionAnalyzer, visible_text
 
 # --- DGA entropy -----------------------------------------------------------------------
 
@@ -125,11 +125,11 @@ def test_coercion_ignores_lookalike_prose(analyzer: CoercionAnalyzer, body: str)
 
 
 def test_score_parts_takes_the_higher_part_not_the_sum(analyzer: CoercionAnalyzer) -> None:
-    html = "<p>Your account has been <b>suspended</b>.</p><p>Final notice.</p>"
+    html = visible_text("<p>Your account has been <b>suspended</b>.</p><p>Final notice.</p>")
 
     assert analyzer.score_parts("Hello, see the attached minutes.", html) == 0.5  # decoy text part
     assert analyzer.score_parts("Final notice. Account suspended.", html) == 0.5  # same message twice
-    assert analyzer.score_parts("", "") == 0.0
+    assert analyzer.score_parts("", visible_text("")) == 0.0
 
 
 def test_only_the_scan_window_is_read(analyzer: CoercionAnalyzer) -> None:
@@ -138,3 +138,8 @@ def test_only_the_scan_window_is_read(analyzer: CoercionAnalyzer) -> None:
 
 def test_pattern_is_compiled_once_and_shared() -> None:
     assert CoercionAnalyzer()._pattern is CoercionAnalyzer()._pattern
+
+
+def test_visible_text_drops_markup_but_keeps_words() -> None:
+    assert visible_text('<a href="https://x.example">Verify</a><script>var a=1</script>').split()[0] == "Verify"
+    assert visible_text("") == ""

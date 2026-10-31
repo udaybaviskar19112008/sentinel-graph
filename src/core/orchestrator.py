@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Final, Protocol
 
-from bs4 import BeautifulSoup
 from fastapi import WebSocket
 from fastapi.concurrency import run_in_threadpool
 from numpy import float64
@@ -30,6 +29,8 @@ from src.core.logger import bind_correlation_id, get_logger
 from src.extractors.mime_parser import unpack_email
 from src.extractors.url_extractor import extract_urls
 from src.forensics.auth_analyzer import analyze_identity
+from src.forensics.dga_detector import analyze_dga_risk
+from src.forensics.nlp_heuristics import CoercionAnalyzer, visible_text
 from src.forensics.route_analyzer import RoutingFindings, analyze_routing
 from src.fusion.meta_scorer import FusionMetaModel
 from src.fusion.xai_engine import Contribution, extract_shap_contributions
@@ -46,6 +47,7 @@ Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
 _EMPTY_TRACE: Final = "The reasoning model produced no output; verdict defaulted to SUSPICIOUS."
 _MAX_SENDER_CHARS: Final = 512  # EmailScanRecord.sender column width
+_COERCION: Final = CoercionAnalyzer()
 
 
 class TelemetrySink(Protocol):
@@ -107,10 +109,17 @@ def _protocol_forensics(raw_bytes: bytes, brands: frozenset[str]) -> _ProtocolFi
     identity = analyze_identity(message, brands)
     routing = analyze_routing(message)
     urls = extract_urls(html, text)
-    payload_text = text if text.strip() else BeautifulSoup(html, "html.parser").get_text(" ")
+    visible_html = visible_text(html)  # parsed once: the SLM payload and the coercion score share it
+    payload_text = text if text.strip() else visible_html
     sender = message.get("From")
+    header = HeaderForensics(
+        **identity,
+        **routing,
+        dga_max_entropy=analyze_dga_risk(urls),
+        nlp_urgency_score=_COERCION.score_parts(text, visible_html),
+    )
     return _ProtocolFindings(
-        HeaderForensics(**identity, **routing),
+        header,
         routing,
         urls,
         payload_text,

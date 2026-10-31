@@ -55,6 +55,8 @@ from src.core.logger import configure_logging, get_logger, shutdown_logging  # n
 from src.extractors.mime_parser import unpack_email  # noqa: E402
 from src.extractors.url_extractor import extract_urls  # noqa: E402
 from src.forensics.auth_analyzer import analyze_identity  # noqa: E402
+from src.forensics.dga_detector import analyze_dga_risk  # noqa: E402
+from src.forensics.nlp_heuristics import CoercionAnalyzer, visible_text  # noqa: E402
 from src.forensics.route_analyzer import analyze_routing  # noqa: E402
 from src.fusion.meta_scorer import FEATURE_NAMES, FusionMetaModel  # noqa: E402
 from src.schemas import VerdictLevel  # noqa: E402
@@ -70,6 +72,7 @@ LABEL_DIRECTORIES: Final = {"benign": 0, "phishing": 1, "easy_ham": 0, "spam": 1
 SKIPPED_FILE_NAMES: Final = frozenset({"cmds"})
 MAX_EMAIL_BYTES: Final = 10 * 1024 * 1024
 TRAINING_SLM_VERDICT: Final = VerdictLevel.SUSPICIOUS  # label-independent on purpose, see module doc
+_COERCION: Final = CoercionAnalyzer()
 MEMAE_LOSS_COLUMN: Final = FEATURE_NAMES.index("memae_loss")
 MEMAE_EPOCHS: Final = 5
 MEMAE_LEARNING_RATE: Final = 0.01
@@ -119,19 +122,25 @@ def corpus_generator(data_dir: Path) -> Generator[tuple[bytes, int], None, None]
 
 
 def process_single_email(raw_bytes: bytes, label: int) -> Example | None:
-    """(10-feature row, delivery DAG, label) via the production extractors, or None on failure.
+    """(full feature row, delivery DAG, label) via the production extractors, or None on failure.
 
     Vision features are zero (nothing is detonated offline), the SLM verdict is the
     constant ``TRAINING_SLM_VERDICT``, and ``memae_loss`` is 0 until the trainer
-    fills it with cross-fitted losses.
+    fills it with cross-fitted losses. The content heuristics are computed exactly as
+    the live pipeline computes them.
     """
     try:
         message, text, html, _ = unpack_email(raw_bytes)
         identity = analyze_identity(message, get_settings().HIGH_RISK_BRAND_KEYWORDS)
         routing = analyze_routing(message)
-        dag = build_email_dag(routing, extract_urls(html, text))
+        urls = extract_urls(html, text)
+        dag = build_email_dag(routing, urls)
+        content = {
+            "dga_max_entropy": analyze_dga_risk(urls),
+            "nlp_urgency_score": _COERCION.score_parts(text, visible_text(html)),
+        }
         row = FusionMetaModel._build_feature_vector(
-            {**identity, **routing},
+            {**identity, **routing, **content},
             {},
             {"graph_nodes_count": dag.num_nodes, "memae_reconstruction_loss": 0.0},
             TRAINING_SLM_VERDICT,

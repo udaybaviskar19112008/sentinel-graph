@@ -70,7 +70,8 @@ def _spam(rng: random.Random, index: int) -> bytes:
         "To: victim@corp.example",
         "Subject: =?utf-8?b?QWNjb3VudCBzdXNwZW5kZWQ=?=",
     ]
-    return _message(headers, "text/html; charset=utf-8", f"<html><body><p>Act now.</p>{links}</body></html>")
+    pressure = "Your account has been suspended. " if index % 2 == 0 else ""
+    return _message(headers, "text/html; charset=utf-8", f"<html><body><p>{pressure}Act now.</p>{links}</body></html>")
 
 
 def write_corpus(root: Path, *, ham: int, spam: int, seed: int = 7) -> Path:

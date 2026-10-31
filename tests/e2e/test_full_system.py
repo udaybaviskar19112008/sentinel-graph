@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app.main import STREAM_PATH, create_app
 from src.core.config import get_settings
+from src.forensics.dga_detector import calculate_shannon_entropy
 from src.schemas import ThreatAssessment
 
 pytestmark = pytest.mark.e2e
@@ -139,6 +140,9 @@ def test_websocket_phishing_detonation(client: TestClient) -> None:
     # Sender side only: our edge relay (40.107.22.55) was stripped as receiver-internal.
     assert header.extracted_ips == ("185.220.101.4", "10.0.0.1", "194.26.29.10")
     assert header.subject == "Your Apple ID has been locked"
+    # Content heuristics, computed live: the lure's registrable label, and no coercive phrase.
+    assert header.dga_max_entropy == pytest.approx(calculate_shannon_entropy("secure-apple-id"))
+    assert header.nlp_urgency_score == 0.0
 
     # The lure was handed to the real sandbox; ".invalid" cannot resolve, so nothing was captured.
     detonation = next(e for e in events if e.get("status") == "Sandbox detonation finished")
