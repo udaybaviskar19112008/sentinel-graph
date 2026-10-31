@@ -12,7 +12,7 @@ import numpy.typing as npt
 import shap
 
 from src.core.logger import get_logger
-from src.fusion.meta_scorer import FEATURES, N_FEATURES, FusionMetaModel
+from src.fusion.meta_scorer import FEATURES, N_FEATURES, FusionMetaModel, as_feature_row
 
 logger = get_logger(__name__)
 
@@ -26,34 +26,36 @@ class Contribution(TypedDict):
     subsystem: str
 
 
-def _positive_class(values: Any, class_index: int) -> npt.NDArray[np.float64]:
-    """This row's SHAP values for the phishing class, whichever layout this shap version returns."""
+def _positive_class(values: Any, class_index: int, width: int) -> npt.NDArray[np.float64]:
+    """This row's ``width`` SHAP values for the phishing class, whichever layout this shap version returns."""
     if isinstance(values, list):  # shap < 0.45: one (rows, features) array per class
         values = values[min(class_index, len(values) - 1)]
     array: npt.NDArray[np.float64] = np.asarray(values, dtype=np.float64)
     if array.ndim == 3:  # shap >= 0.45: (rows, features, classes)
         array = array[..., min(class_index, array.shape[-1] - 1)]
     # Two dimensions now; a single-output model was already explaining the positive class.
-    row: npt.NDArray[np.float64] = array.reshape(-1, N_FEATURES)[0]
+    row: npt.NDArray[np.float64] = array.reshape(-1, width)[0]
     return row
 
 
 def explain_positive_class(
     meta_model: Any, feature_vector: npt.NDArray[np.float64]
 ) -> tuple[float, npt.NDArray[np.float64]]:
-    """(base value, per-feature SHAP values) for the phishing class of one 10-feature row.
+    """(base value, SHAP values in ``FEATURES`` order) for the phishing class of one full row.
 
-    ``meta_model`` is a fitted tree classifier or a ``FusionMetaModel``.
+    ``meta_model`` is a ``FusionMetaModel`` or a fitted tree classifier over all of
+    ``FEATURES``. A feature the model was not trained on gets an impact of exactly 0.
     """
-    estimator = meta_model.model if isinstance(meta_model, FusionMetaModel) else meta_model
-    row = np.asarray(feature_vector, dtype=np.float64)
-    if row.size != N_FEATURES:
-        raise ValueError(f"expected {N_FEATURES} features, got shape {row.shape}")
-    row = np.nan_to_num(row.reshape(1, N_FEATURES), nan=0.0, posinf=1.0, neginf=0.0)
+    if isinstance(meta_model, FusionMetaModel):
+        estimator, columns = meta_model.model, meta_model.columns
+    else:
+        estimator, columns = meta_model, np.arange(N_FEATURES)
+    row = as_feature_row(feature_vector)[:, columns]
 
     class_index = list(estimator.classes_).index(1)
     explainer = shap.TreeExplainer(estimator)
-    impacts = _positive_class(explainer.shap_values(row), class_index)
+    impacts = np.zeros(N_FEATURES, dtype=np.float64)
+    impacts[columns] = _positive_class(explainer.shap_values(row), class_index, len(columns))
     expected = np.atleast_1d(np.asarray(explainer.expected_value, dtype=np.float64))
     base_value = float(expected[min(class_index, expected.size - 1)])
     return base_value, impacts

@@ -47,7 +47,7 @@ class _Contract(BaseModel):
 
 
 class HeaderForensics(_Contract):
-    """Findings from the transport and authentication headers."""
+    """Tier 1 findings: transport and authentication headers, plus lexical heuristics over the links and text."""
 
     spf: Annotated[AuthResult, Field(description="SPF result for the envelope sender.")]
     dkim: Annotated[AuthResult, Field(description="DKIM signature verification result.")]
@@ -85,6 +85,17 @@ class HeaderForensics(_Contract):
     return_path_domain: Annotated[
         str | None, Field(description="Registered domain of the Return-Path (envelope sender).")
     ] = None
+    dga_max_entropy: Annotated[
+        float,
+        Field(
+            ge=0.0,
+            allow_inf_nan=False,
+            description="Highest Shannon entropy (bits) of a link's registrable label; 0 without links.",
+        ),
+    ] = 0.0
+    nlp_urgency_score: Annotated[
+        UnitScore, Field(description="Coercive-phrase score: 0.25 per phrase in the body, capped at 1.")
+    ] = 0.0
 
 
 class VisionForensics(_Contract):

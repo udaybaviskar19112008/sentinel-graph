@@ -9,7 +9,7 @@ import type { GeoPoint } from '@/lib/geoResolver'
 
 export type AuthStatus = 'pass' | 'fail' | 'neutral' | 'none' | 'permerror' | 'temperror'
 export type VerdictLevel = 'BENIGN' | 'SUSPICIOUS' | 'PHISHING' | 'CRITICAL'
-export type Subsystem = 'PROTOCOL_FORENSICS' | 'VISION_ENGINE' | 'TOPOLOGY_GNN' | 'COGNITIVE_SLM'
+export type Subsystem = 'PROTOCOL_FORENSICS' | 'VISION_ENGINE' | 'TOPOLOGY_GNN' | 'COGNITIVE_SLM' | 'CONTENT_HEURISTICS'
 export type NodeKind = 'SENDER' | 'RELAY_HOP' | 'RECEIVER' | 'URL'
 
 export interface HeaderForensics {
@@ -27,6 +27,8 @@ export interface HeaderForensics {
   from_domain: string | null
   reply_to_domain: string | null
   return_path_domain: string | null
+  dga_max_entropy: number // highest Shannon entropy (bits) of a link's registrable label; 0 without links
+  nlp_urgency_score: number // 0.25 per coercive phrase in the body, capped at 1
 }
 
 export interface VisionForensics {

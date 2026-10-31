@@ -12,11 +12,13 @@ from torch_geometric.data import Data
 
 from scripts import train_orchestrator as orchestrator
 from src.core.config import get_settings
-from src.fusion.meta_scorer import FEATURE_NAMES, FusionMetaModel
+from src.fusion.meta_scorer import FEATURE_NAMES, N_FEATURES, FusionMetaModel
 from src.topology.memae_model import GraphMemAE, normalized_adjacency
 from tests.synthetic_corpus import write_corpus
 
 VISION_AND_SLM = ["screenshot_hash_exists", "visual_spoof_score", "is_cred_harvester", "slm_verdict_severity"]
+# The trainer does not compute the content heuristics yet, so they are still constant zero.
+NOT_YET_EXTRACTED = ["dga_max_entropy", "nlp_urgency_score"]
 
 
 @pytest.fixture(scope="module")
@@ -65,7 +67,7 @@ def test_single_email_yields_features_dag_and_label(corpus: Path) -> None:
 
     assert result is not None
     row, dag, returned_label = result
-    assert row.shape == (10,) and returned_label == 0
+    assert row.shape == (N_FEATURES,) and returned_label == 0
     assert dag.num_nodes == row[FEATURE_NAMES.index("graph_nodes_count")]
     # Offline stand-ins never depend on the label.
     assert row[[FEATURE_NAMES.index(name) for name in VISION_AND_SLM]].tolist() == [0, 0, 0, 1]
@@ -106,7 +108,7 @@ def test_training_writes_artifacts_the_runtime_loads_as_trained(
     report = json.loads((models / "training_report.json").read_text("utf-8"))
     assert report["emails"] == 20 and report["class_counts"] == {"benign": 10, "phishing": 10}
     assert 0.0 <= report["oof_roc_auc"] <= 1.0
-    assert report["constant_features"] == VISION_AND_SLM
+    assert report["constant_features"] == VISION_AND_SLM + NOT_YET_EXTRACTED
     phishing = report["oof_phishing_at_0_5"]
     assert set(phishing) == {"precision", "recall", "f1"} and all(0.0 <= v <= 1.0 for v in phishing.values())
     assert "F1" in output

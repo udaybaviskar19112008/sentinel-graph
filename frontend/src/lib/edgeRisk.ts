@@ -8,7 +8,10 @@ import type { EdgeData, ShapContribution, Subsystem } from '@/store/useThreatSto
  */
 export type EdgeRisk = 'pending' | 'unscored' | 'alert' | 'safe'
 
-/** Delivery hops carry the protocol and route evidence; the sender-to-URL link carries what the sandbox saw. */
+/**
+ * Delivery hops carry the protocol and route evidence; the sender-to-URL link carries what the sandbox saw.
+ * CONTENT_HEURISTICS (link entropy, coercive wording) describe the whole message, so they colour no edge.
+ */
 const EDGE_SUBSYSTEMS: Record<EdgeData['kind'], readonly Subsystem[]> = {
   route: ['PROTOCOL_FORENSICS', 'TOPOLOGY_GNN'],
   link: ['VISION_ENGINE'],
