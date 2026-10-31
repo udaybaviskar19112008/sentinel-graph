@@ -84,6 +84,8 @@ SEED: Final = 42
 Example = tuple[npt.NDArray[np.float64], Data, int]
 # Per epoch: (mean training loss, mean held-out loss or None without a validation set).
 LossHistory = list[tuple[float, float | None]]
+# One cross-validation fold: (training row indices, held-out row indices).
+Split = tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]
 
 
 # --- Stage 7A: ingestion ----------------------------------------------------------
@@ -249,7 +251,7 @@ def train_memae(
 def cross_fitted_memae_losses(
     dags: list[Data],
     labels: npt.NDArray[np.int64],
-    splits: list[tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]],
+    splits: list[Split],
     *,
     epochs: int = MEMAE_EPOCHS,
     histories: list[LossHistory] | None = None,
@@ -278,8 +280,33 @@ def cross_fitted_memae_losses(
     return losses
 
 
-def _forest() -> RandomForestClassifier:
+def make_forest() -> RandomForestClassifier:
+    """The fusion classifier's exact configuration (training and the ablation study share it)."""
     return RandomForestClassifier(n_estimators=100, max_depth=6, random_state=SEED, n_jobs=-1)
+
+
+def stratified_splits(y_labels: npt.NDArray[np.int64]) -> list[Split]:
+    """The seeded stratified folds behind every reported metric (up to ``FOLDS``).
+
+    They depend only on the labels' order, so any caller holding the same corpus gets
+    the same folds. SystemExit with fewer than two emails of either class.
+    """
+    class_counts = np.bincount(y_labels, minlength=2)
+    folds = min(FOLDS, int(class_counts.min()))
+    if folds < 2:
+        raise SystemExit(f"Need at least 2 emails of each class to cross-validate; got benign/phishing = {class_counts.tolist()}")
+    return list(StratifiedKFold(n_splits=folds, shuffle=True, random_state=SEED).split(np.zeros(len(y_labels)), y_labels))
+
+
+def out_of_fold_probabilities(
+    features: npt.NDArray[np.float64], y_labels: npt.NDArray[np.int64], splits: list[Split]
+) -> npt.NDArray[np.float64]:
+    """Each email's phishing probability from a forest fitted on the other folds only."""
+    oof = np.zeros(len(y_labels), dtype=np.float64)
+    for train_index, valid_index in splits:
+        forest = make_forest().fit(features[train_index], y_labels[train_index])
+        oof[valid_index] = forest.predict_proba(features[valid_index])[:, list(forest.classes_).index(1)]
+    return oof
 
 
 def _pyplot() -> Any:
@@ -338,10 +365,8 @@ def train_and_export(
 ) -> dict[str, Any]:
     """Cross-validate, fit on everything, write the runtime artifacts; return the training report."""
     class_counts = np.bincount(y_labels, minlength=2)
-    folds = min(FOLDS, int(class_counts.min()))
-    if folds < 2:
-        raise SystemExit(f"Need at least 2 emails of each class to cross-validate; got benign/phishing = {class_counts.tolist()}")
-    splits = list(StratifiedKFold(n_splits=folds, shuffle=True, random_state=SEED).split(X_meta_arrays, y_labels))
+    splits = stratified_splits(y_labels)
+    folds = len(splits)
 
     features = X_meta_arrays.copy()
     histories: list[LossHistory] = []
@@ -350,10 +375,7 @@ def train_and_export(
     # Out-of-fold, so this is how unseen *benign* routes score: 1% of normal mail exceeds it.
     zero_day_threshold = float(np.quantile(losses[y_labels == 0], ZERO_DAY_QUANTILE))
 
-    oof = np.zeros(len(y_labels), dtype=np.float64)
-    for train_index, valid_index in splits:
-        forest = _forest().fit(features[train_index], y_labels[train_index])
-        oof[valid_index] = forest.predict_proba(features[valid_index])[:, list(forest.classes_).index(1)]
+    oof = out_of_fold_probabilities(features, y_labels, splits)
     auc = float(roc_auc_score(y_labels, oof))
     report = classification_report(
         y_labels, (oof >= 0.5).astype(int), target_names=["benign", "phishing"], digits=3, zero_division=0
@@ -370,7 +392,7 @@ def train_and_export(
     plot_roc_curve(y_labels, oof, auc, roc_path)
     plot_training_loss(histories, loss_path)
 
-    final_forest = _forest().fit(features, y_labels)
+    final_forest = make_forest().fit(features, y_labels)
     final_memae = train_memae(
         [dag for dag, label in zip(dag_list, y_labels, strict=True) if label == 0], epochs=memae_epochs
     )
