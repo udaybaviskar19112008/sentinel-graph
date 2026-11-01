@@ -1,31 +1,16 @@
-import { lazy, type ReactNode, Suspense } from 'react'
+import type { ReactNode } from 'react'
 import { SidebarNavigation } from '@/components/SidebarNavigation'
 
-// three.js is the bulk of the bundle; let the panels become interactive first.
-const CyberCanvas = lazy(() => import('@/components/CyberCanvas'))
-
 /**
- * The persistent frame: the globe behind, the sidebar and the current page on top.
- *
- * It never unmounts while the user switches pages, so the WebGL context survives every
- * navigation. Glass lives on the individual panels rather than one full-screen sheet:
- * a single frosted pane over the whole page would blur the globe out of sight.
+ * The persistent frame: the navigation, and the current screen in a canvas that scrolls
+ * on its own. It never unmounts while the user switches screens; the analysis socket
+ * lives above it in App, so a scan in flight survives every navigation.
  */
 export function Layout({ children }: { children: ReactNode }) {
   return (
-    <div className="relative h-full w-full overflow-hidden text-white">
-      {/* z-0, not -z-10: the root has no stacking context of its own, so a negative z-index
-          would paint the canvas beneath the page background. */}
-      <div className="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
-        <Suspense fallback={null}>
-          <CyberCanvas />
-        </Suspense>
-      </div>
-
-      <div className="pointer-events-none absolute inset-0 z-10 flex">
-        <SidebarNavigation />
-        <main className="pointer-events-auto relative min-w-0 flex-1 p-4">{children}</main>
-      </div>
+    <div className="flex h-full w-full flex-col md:flex-row">
+      <SidebarNavigation />
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   )
 }

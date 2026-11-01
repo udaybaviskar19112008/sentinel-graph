@@ -1,79 +1,63 @@
-import { Upload } from 'lucide-react'
-import { type DragEvent, type KeyboardEvent, useRef, useState } from 'react'
-import { cn } from '@/lib/utils'
-import { type SocketStatus, useThreatStore } from '@/store/useThreatStore'
+import { type DragEvent, useRef, useState } from 'react'
 
-const STATUS_DOT: Record<SocketStatus, string> = {
-  disconnected: 'bg-stone-500',
-  connecting: 'bg-cyber-accent animate-pulse',
-  connected: 'bg-cyber-safe animate-pulse',
+const ACCEPT = '.eml,.txt,message/rfc822'
+
+/** Only a drag that carries files lights the drop target; dragging a graph node never does. */
+function carriesFiles(event: DragEvent): boolean {
+  return event.dataTransfer.types.includes('Files')
 }
 
-/** Drop (or pick) one raw email; each new file starts a new scan. */
-export function Dropzone({ onFile, className }: { onFile: (file: File) => void; className?: string }) {
+/**
+ * The ways an email gets in: a file picker behind the screen's primary button, and a drop
+ * anywhere on the screen. Each new file starts a new scan. Render `fileInput` once.
+ */
+export function useEmailUpload(onFile: (file: File) => void) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
-  const socketStatus = useThreatStore((s) => s.socketStatus)
-  const phase = useThreatStore((s) => s.currentPhase)
 
   const take = (files: FileList | null) => {
     const file = files?.[0]
     if (file) onFile(file)
   }
-  const browse = () => inputRef.current?.click()
 
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label="Upload an email for analysis"
-      onClick={browse}
-      onKeyDown={(event: KeyboardEvent) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          browse()
-        }
-      }}
-      onDragOver={(event: DragEvent) => {
+  return {
+    dragging,
+    browse: () => inputRef.current?.click(),
+    dropHandlers: {
+      onDragOver: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
         event.preventDefault() // required for the drop event to fire
         event.dataTransfer.dropEffect = 'copy'
-      }}
-      onDragEnter={() => setDragging(true)}
-      onDragLeave={(event: DragEvent) => {
+      },
+      onDragEnter: (event: DragEvent) => {
+        if (carriesFiles(event)) setDragging(true)
+      },
+      onDragLeave: (event: DragEvent) => {
         // Ignore leaving into a child element.
         if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) {
           setDragging(false)
         }
-      }}
-      onDrop={(event: DragEvent) => {
+      },
+      onDrop: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
         event.preventDefault()
         setDragging(false)
         take(event.dataTransfer.files)
-      }}
-      className={cn(
-        'glass-panel flex cursor-pointer flex-col items-center gap-2 border-dashed px-4 py-6 text-center outline-none transition-colors',
-        'focus-visible:border-cyber-accent hover:border-cyber-accent/60',
-        dragging && 'border-cyber-accent bg-cyber-accent/10',
-        className,
-      )}
-    >
-      <Upload className={cn('h-6 w-6', dragging ? 'text-cyber-accent' : 'text-stone-400')} aria-hidden="true" />
-      <p className="text-sm text-stone-300">Drop a raw email (.eml) or click to browse</p>
-      <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-stone-400">
-        <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[socketStatus])} aria-hidden="true" />
-        {socketStatus} · {phase}
-      </p>
+      },
+    },
+    fileInput: (
       <input
         ref={inputRef}
         type="file"
-        accept=".eml,.txt,message/rfc822"
+        accept={ACCEPT}
         className="hidden"
-        onClick={(event) => event.stopPropagation()}
+        tabIndex={-1}
+        aria-hidden="true"
         onChange={(event) => {
           take(event.target.files)
           event.target.value = '' // let the same file be chosen again
         }}
       />
-    </div>
-  )
+    ),
+  }
 }

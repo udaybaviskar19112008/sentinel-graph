@@ -32,7 +32,13 @@ setup.bat
 bash setup.sh
 ```
 
-(`setup.bat` on Windows, `bash setup.sh` on macOS/Linux.) Then start the two halves in two terminals:
+(`setup.bat` on Windows, `bash setup.sh` on macOS/Linux.) Then, on Windows, start everything with one command; it runs the frontend and the backend together, opens the browser, and **Ctrl-C** stops both (pass a Python path, e.g. `run.bat C:\Users\you\anaconda3\python.exe`, to pick an interpreter):
+
+```bat
+run.bat
+```
+
+Or start the two halves yourself, in two terminals:
 
 ```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -43,6 +49,33 @@ cd frontend && npm run dev
 ```
 
 Open **http://localhost:5173** and drop one of the `.eml` files from `samples/`. The trained production models ship in the repository (`models/fusion_meta.joblib` — the 12-feature fusion model, OOF ROC-AUC 0.953 — and `models/topology/memae.pt`, about 670 KB in plain git, no Git LFS needed), so the samples score as documented in `samples/README.txt`. The vision and SLM engines are still stand-ins (see the model status table below).
+
+### 🌐 Host it publicly (Cloudflare quick tunnel, Windows)
+
+Needs [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) on `PATH` (`winget install --id Cloudflare.cloudflared`). Stop any dev server on ports 5173 and 8000 first, then:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\host_tunnel.ps1
+```
+
+The script builds the frontend, serves the production build with `vite preview` on :5173 (the dev server is too slow through a tunnel), opens the tunnel, and starts the backend with the tunnel's `https://<words>.trycloudflare.com` address added to `SOC_CORS_ALLOW_ORIGINS` — the analysis WebSocket checks the browser's `Origin`, so without it every scan through the tunnel fails with close code 1006. It prints the public URL; **Ctrl-C** stops all three. Add `-SkipBuild` to reuse the last build, or `-Python C:\path\to\python.exe` to pick an interpreter. The address changes on every run, and anyone with it can read the scan history and submit emails, so stop it when the demo ends.
+
+<details><summary>The same thing by hand, in three terminals</summary>
+
+```powershell
+npm --prefix frontend run build; npm --prefix frontend run preview -- --port 5173 --strictPort
+```
+
+```powershell
+cloudflared tunnel --url http://localhost:5173
+```
+
+```powershell
+$env:SOC_CORS_ALLOW_ORIGINS = '["http://localhost:5173","http://127.0.0.1:5173","https://<words>.trycloudflare.com"]'; python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Put the address the tunnel printed in place of `https://<words>.trycloudflare.com`.
+</details>
 
 ---
 
@@ -83,13 +116,13 @@ flowchart LR
     TA --> DB[("🗄️ SQLite scan history<br/>scans + IP / URL / domain indicators")]
     DB --> HIST["🔎 REST history API<br/>/api/v1/history/scans · /indicators/{value}"]
     WS -. "telemetry events (every step)" .-> Z["🗂️ Zustand store"]
-    Z --> LIVE["🎛️ / Live detonation<br/>React Flow map · live terminal · risk gauge"]
+    Z --> LIVE["🎛️ / Live detonation<br/>verdict · React Flow route map · pipeline log"]
     Z --> GEO["🌍 Geo-IP resolver<br/>ipapi.co lookup · flagged hashed fallback"]
-    GEO --> GLOBE["🌐 WebGL CyberCanvas<br/>wireframe globe · hop-to-hop arcs"]
+    GEO --> GLOBE["🌐 WebGL CyberCanvas<br/>graticule globe · hop-to-hop arcs"]
     HIST --> HPAGE["📜 /history<br/>Threat intelligence log"]
 ```
 
-Tier 1 runs first because every later tier needs its output (bodies, URLs, route); vision and topology then run concurrently. The canvas and the analysis socket live in the app shell outside React Router's routes, so switching between the live view and the history log never tears down the WebGL context or a scan in flight.
+Tier 1 runs first because every later tier needs its output (bodies, URLs, route); vision and topology then run concurrently. The analysis socket lives in the app shell outside React Router's routes, so switching between the live view and the history log never tears down a scan in flight; the globe sits in its own panel on the live view, beside the list of hops it plots.
 
 | Stage | Module | What it produces |
 |---|---|---|

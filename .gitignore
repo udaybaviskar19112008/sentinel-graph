@@ -42,3 +42,6 @@ venv/
 
 # Scan history database
 *.db
+
+# Design-skill working files (screenshots, inspector reports)
+/.taste-skill/

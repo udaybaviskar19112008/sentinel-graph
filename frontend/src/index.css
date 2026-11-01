@@ -3,25 +3,53 @@
 @tailwind utilities;
 
 @layer components {
-  /* Frosted glass floating over the animated backdrop and the globe. */
-  .glass-panel {
-    @apply rounded-3xl border border-glass-border bg-glass-base shadow-2xl backdrop-blur-2xl;
+  /* A card: one step darker than the ground, lifted by the style's soft shadow, no border. */
+  .card {
+    @apply min-w-0 rounded-md bg-surface p-5 shadow-card;
+  }
+  .card-title {
+    @apply text-card font-semibold text-ink;
+  }
+
+  /* Buttons share one height and one fully round shape. One primary per screen. */
+  .btn {
+    @apply inline-flex h-[34px] shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 text-body font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-ground active:translate-y-px disabled:cursor-not-allowed disabled:active:translate-y-0;
+  }
+  .btn-primary {
+    @apply bg-ink text-surface hover:bg-[#e4e4e7] disabled:bg-raised disabled:text-muted;
+  }
+  .btn-secondary {
+    @apply border border-control bg-transparent text-ink hover:bg-raised disabled:border-line disabled:text-muted disabled:hover:bg-transparent;
+  }
+  .text-action {
+    @apply cursor-pointer rounded font-medium text-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent;
+  }
+
+  /* Verdict and status pills: a pale tint with dark-on-light ink of the same hue. */
+  .pill {
+    @apply inline-flex h-[22px] flex-none items-center whitespace-nowrap rounded-full bg-pill-neutral-bg px-2 text-small font-medium text-pill-neutral-ink;
   }
 }
 
 /*
- * React Flow ships light controls; restyle them as glass. Deliberately outside @layer:
- * Tailwind drops layered rules whose class names never appear in our source, and React
- * Flow adds these class names at runtime, so a layered override silently vanished.
+ * React Flow ships light controls; restyle them for the dark card. Deliberately outside
+ * @layer: Tailwind drops layered rules whose class names never appear in our source, and
+ * React Flow adds these class names at runtime, so a layered override silently vanished.
  */
+.react-flow .react-flow__controls {
+  @apply overflow-hidden rounded-md shadow-none;
+}
 .react-flow .react-flow__controls-button {
-  @apply border-b-glass-border bg-glass-base fill-stone-200 backdrop-blur-lg hover:bg-glass-highlight;
+  @apply h-7 w-7 border-b border-b-rule bg-raised fill-muted hover:bg-control hover:fill-ink;
+}
+.react-flow .react-flow__controls-button:last-child {
+  @apply border-b-0;
 }
 .react-flow .react-flow__attribution {
   @apply bg-transparent;
 }
 .react-flow .react-flow__attribution a {
-  @apply text-stone-500;
+  @apply text-muted;
 }
 
 @layer base {
@@ -29,7 +57,7 @@
     color-scheme: dark; /* native scrollbars and form controls match the UI */
   }
 
-  /* Lock the app to the viewport: the WebGL canvas sizes itself to this box, and nothing scrolls. */
+  /* Lock the shell to the viewport; each screen scrolls inside its own canvas. */
   html,
   body,
   #root {
@@ -41,32 +69,12 @@
   }
 
   body {
-    background-color: theme('colors.cyber-bg');
-    color: theme('colors.stone.300');
+    @apply bg-ground font-sans text-body text-ink antialiased;
+    /* Digits keep one width everywhere: risk scores, impacts and timestamps stack in columns. */
+    font-variant-numeric: tabular-nums;
   }
 
-  /*
-   * Stone -> rose -> stone, panned slowly. An oversized fixed layer moved by transform:
-   * the compositor animates it without repainting the page every frame.
-   */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: -25%;
-    z-index: -1;
-    pointer-events: none;
-    background-image: linear-gradient(
-      to bottom right,
-      theme('colors.stone.800'),
-      theme('colors.rose.950 / 20%'),
-      theme('colors.stone.900')
-    );
-    @apply animate-gradient-pan;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    body::before {
-      animation: none;
-    }
+  ::selection {
+    @apply bg-accent/40;
   }
 }

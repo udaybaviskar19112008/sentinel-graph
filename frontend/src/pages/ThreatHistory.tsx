@@ -1,46 +1,54 @@
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { fetchScans, type Indicator, type Scan } from '@/lib/historyApi'
+import { Link } from 'react-router-dom'
+import { Screen } from '@/components/Screen'
+import { VerdictPill } from '@/components/VerdictCard'
+import { fetchScans, type Indicator, type IndicatorType, type Scan } from '@/lib/historyApi'
 import { cn } from '@/lib/utils'
-import type { VerdictLevel } from '@/store/useThreatStore'
 
 const SHOWN_INDICATORS = 3
+const SKELETON_ROWS = 6
+const PAGE_SIZE = 50 // fetchScans asks for one page of this many
 
-const VERDICT_BADGE: Record<VerdictLevel, string> = {
-  BENIGN: 'bg-cyber-safe/20 text-cyber-safe border-cyber-safe',
-  SUSPICIOUS: 'bg-cyber-warning/10 text-cyber-warning border-cyber-warning/60',
-  PHISHING: 'bg-cyber-alert/10 text-cyber-alert border-cyber-alert/60',
-  CRITICAL: 'bg-cyber-alert/20 text-cyber-alert border-cyber-alert',
+const TYPE_LABEL: Record<IndicatorType, string> = { IP: 'IP', URL: 'URL', DOMAIN: 'Domain' }
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** Local time in ISO order (2026-10-31 23:46), so the rows compare digit for digit. */
+function isoLocal(timestamp: string): string {
+  const d = new Date(timestamp)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-function riskColor(risk: number): string {
-  if (risk >= 75) return 'text-cyber-alert'
-  if (risk >= 40) return 'text-cyber-warning'
-  return 'text-cyber-safe'
+function clock(d: Date): string {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-const timestampFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
-
+/** Addresses and domains are identifiers, so they keep the monospace; a flagged one is the row's one red mark. */
 function Indicators({ indicators }: { indicators: Indicator[] }) {
-  if (indicators.length === 0) return <span className="text-stone-500">none</span>
+  if (indicators.length === 0) return <span className="text-muted">—</span>
   const hidden = indicators.length - SHOWN_INDICATORS
   return (
-    <ul className="flex flex-wrap gap-1" title={indicators.map((i) => `${i.type}: ${i.value}`).join('\n')}>
+    <ul className="flex flex-wrap gap-1.5" title={indicators.map((i) => `${i.type}: ${i.value}`).join('\n')}>
       {indicators.slice(0, SHOWN_INDICATORS).map((indicator) => (
         <li
           key={`${indicator.type}:${indicator.value}`}
           className={cn(
-            'max-w-[16rem] truncate rounded border px-1.5 py-0.5 font-mono text-[11px]',
-            indicator.malicious_flag ? 'border-cyber-alert/50 text-cyber-alert' : 'border-glass-border text-stone-400',
+            'max-w-[16rem] truncate rounded bg-raised px-1.5 py-0.5 font-mono text-body',
+            indicator.malicious_flag ? 'text-negative' : 'text-ink',
           )}
         >
-          <span className="text-stone-500">{indicator.type} </span>
+          <span className="font-sans text-muted">{TYPE_LABEL[indicator.type]} </span>
           {indicator.value}
         </li>
       ))}
-      {hidden > 0 && <li className="px-1 py-0.5 text-[11px] text-stone-500">+{hidden} more</li>}
+      {hidden > 0 && <li className="py-0.5 text-small text-muted">+{hidden} more</li>}
     </ul>
   )
+}
+
+function Bar({ className }: { className: string }) {
+  return <span className={cn('block h-3.5 rounded bg-raised', className)} aria-hidden="true" />
 }
 
 /** Past scans from the history API, newest first, with a manual refresh. */
@@ -48,6 +56,7 @@ export function ThreatHistory() {
   const [scans, setScans] = useState<Scan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [updated, setUpdated] = useState<Date | null>(null)
   // Bumped by the refresh button; each value runs the fetch effect once more.
   const [generation, setGeneration] = useState(0)
 
@@ -58,6 +67,7 @@ export function ThreatHistory() {
     fetchScans(controller.signal).then(
       (fetched) => {
         setScans(fetched)
+        setUpdated(new Date())
         setLoading(false)
       },
       (caught: unknown) => {
@@ -75,77 +85,132 @@ export function ThreatHistory() {
     setGeneration((current) => current + 1)
   }
 
+  // A refresh keeps the rows already on screen; only the first load shows the skeleton.
+  const firstLoad = loading && scans.length === 0
+  const subline = firstLoad
+    ? 'Loading the scan log…'
+    : scans.length === 0
+      ? 'No scans recorded yet.'
+      : scans.length >= PAGE_SIZE
+        ? `The ${scans.length} most recent scans, newest first. Export has every saved scan.`
+        : `${scans.length} scan${scans.length === 1 ? '' : 's'}, newest first.`
+
   return (
-    <div className="glass-panel pointer-events-auto flex h-full w-full flex-col overflow-hidden p-6">
-      <header className="mb-4 flex items-center justify-between border-b border-cyber-accent/40 pb-3 shadow-[0_8px_16px_-12px_rgba(240,171,252,0.45)]">
-        <h1 className="font-mono text-lg uppercase tracking-[0.25em] text-white">
-          Global Threat Intelligence Log
-        </h1>
-        <button
-          type="button"
-          onClick={refresh}
-          disabled={loading}
-          aria-label="Refresh scan history"
-          className="flex items-center gap-2 rounded-md border border-glass-border px-3 py-1.5 text-xs uppercase tracking-widest text-stone-300 transition-colors hover:border-cyber-accent/60 hover:text-cyber-accent disabled:opacity-50"
-        >
-          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} aria-hidden="true" />
-          Refresh
-        </button>
-      </header>
+    <Screen
+      title="Scan history"
+      subline={subline}
+      actions={
+        <>
+          {updated && <p className="text-small text-muted">Updated {clock(updated)}</p>}
+          <button type="button" onClick={refresh} disabled={loading} className="btn btn-secondary">
+            <RefreshCw className={cn('h-4 w-4', loading && 'motion-safe:animate-spin')} strokeWidth={1.75} aria-hidden="true" />
+            Refresh
+          </button>
+        </>
+      }
+    >
+      <section className="card px-0 py-2" aria-label="Scans">
+        {error && (
+          <p role="alert" className="flex items-start gap-2 px-5 py-3 text-body text-ink">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-negative" aria-hidden="true" />
+            <span>
+              Couldn’t load the scan history ({error}).{' '}
+              <button type="button" className="text-action" onClick={refresh}>
+                Retry
+              </button>
+            </span>
+          </p>
+        )}
 
-      {error && (
-        <p role="alert" className="mb-3 rounded-md border border-cyber-alert/50 bg-cyber-alert/10 px-3 py-2 text-sm text-cyber-alert">
-          {error}
-        </p>
-      )}
-
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead className="sticky top-0 bg-cyber-bg/90 text-[10px] uppercase tracking-[0.2em] text-stone-400 backdrop-blur">
+        <table className="hidden w-full border-collapse text-left text-body md:table">
+          <thead className="sticky top-0 z-10 bg-surface text-small text-muted">
             <tr>
-              <th className="px-3 py-2 font-normal">Timestamp</th>
-              <th className="px-3 py-2 font-normal">Target subject</th>
-              <th className="px-3 py-2 font-normal">Final verdict</th>
-              <th className="px-3 py-2 text-right font-normal">Risk score</th>
-              <th className="px-3 py-2 font-normal">Indicators</th>
+              <th className="h-[38px] border-b border-line pl-5 pr-3 font-normal">Email</th>
+              <th className="border-b border-line px-3 font-normal">Verdict</th>
+              <th className="border-b border-line px-3 text-right font-normal">Risk</th>
+              <th className="border-b border-line px-3 font-normal">Indicators</th>
+              <th className="border-b border-line pl-3 pr-5 text-right font-normal">Scanned</th>
             </tr>
           </thead>
           <tbody>
+            {firstLoad &&
+              Array.from({ length: SKELETON_ROWS }, (_, index) => (
+                <tr key={index} className="border-b border-rule last:border-b-0">
+                  <td className="py-3 pl-5 pr-3">
+                    <Bar className="w-64" />
+                    <Bar className="mt-1.5 w-40" />
+                  </td>
+                  <td className="px-3 py-3">
+                    <Bar className="w-16" />
+                  </td>
+                  <td className="px-3 py-3">
+                    <Bar className="ml-auto w-6" />
+                  </td>
+                  <td className="px-3 py-3">
+                    <Bar className="w-72" />
+                  </td>
+                  <td className="py-3 pl-3 pr-5">
+                    <Bar className="ml-auto w-28" />
+                  </td>
+                </tr>
+              ))}
             {scans.map((scan) => (
-              <tr key={scan.id} className="border-b border-white/5 align-top transition-colors hover:bg-white/5">
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-stone-400">
-                  {timestampFormat.format(new Date(scan.timestamp))}
-                </td>
-                <td className="max-w-md px-3 py-2">
-                  <p className="truncate" title={scan.subject ?? undefined}>
-                    {scan.subject ?? <span className="text-stone-500">(no subject)</span>}
+              <tr key={scan.id} className="border-b border-rule align-top last:border-b-0">
+                <td className="max-w-[22rem] py-3 pl-5 pr-3">
+                  <p className="truncate text-ink" title={scan.subject ?? undefined}>
+                    {scan.subject ?? <span className="text-muted">(no subject)</span>}
                   </p>
-                  {scan.sender && <p className="truncate text-xs text-stone-400">{scan.sender}</p>}
+                  {scan.sender && <p className="truncate text-small text-muted">{scan.sender}</p>}
                 </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={cn(
-                      'inline-block rounded-md border px-2 py-1 font-mono text-xs',
-                      VERDICT_BADGE[scan.final_verdict],
-                    )}
-                  >
-                    {scan.final_verdict}
-                  </span>
+                <td className="px-3 py-3">
+                  <VerdictPill verdict={scan.final_verdict} />
                 </td>
-                <td className={cn('px-3 py-2 text-right font-mono', riskColor(scan.overall_risk))}>
-                  {scan.overall_risk}
-                </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-3 text-right text-ink">{scan.overall_risk}</td>
+                <td className="px-3 py-3">
                   <Indicators indicators={scan.indicators} />
                 </td>
+                <td className="whitespace-nowrap py-3 pl-3 pr-5 text-right text-muted">{isoLocal(scan.timestamp)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {/* Below 768px the table becomes two-line rows: the email and its risk, then the rest. */}
+        <ul className="md:hidden">
+          {firstLoad &&
+            Array.from({ length: SKELETON_ROWS }, (_, index) => (
+              <li key={index} className="border-b border-rule px-4 py-3 last:border-b-0">
+                <Bar className="w-48" />
+                <Bar className="mt-2 w-32" />
+              </li>
+            ))}
+          {scans.map((scan) => (
+            <li key={scan.id} className="border-b border-rule px-4 py-3 last:border-b-0">
+              <p className="flex items-baseline justify-between gap-3">
+                <span className="truncate text-ink">{scan.subject ?? '(no subject)'}</span>
+                <span className="text-ink">{scan.overall_risk}</span>
+              </p>
+              <p className="mt-1 flex items-center gap-2 text-small text-muted">
+                <VerdictPill verdict={scan.final_verdict} />
+                <span className="truncate">{scan.sender ?? '—'}</span>
+              </p>
+              <p className="mt-1 text-small text-muted">
+                {isoLocal(scan.timestamp)} · {scan.indicators.length} indicator{scan.indicators.length === 1 ? '' : 's'}
+              </p>
+            </li>
+          ))}
+        </ul>
+
         {!loading && !error && scans.length === 0 && (
-          <p className="py-10 text-center text-sm text-stone-400">No scans recorded yet. Analyse an email to start the log.</p>
+          <p className="px-5 py-4 text-body text-muted">
+            No scans recorded yet.{' '}
+            <Link to="/" className="text-action">
+              Analyse an email
+            </Link>{' '}
+            to start the log.
+          </p>
         )}
-      </div>
-    </div>
+      </section>
+    </Screen>
   )
 }
