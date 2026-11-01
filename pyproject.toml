@@ -41,6 +41,7 @@ dev = [
     "pytest-asyncio",
     "httpx",  # fastapi.testclient
     "mypy",
+    "python-docx",  # scripts/generate_custom_report.py
 ]
 
 [tool.setuptools.packages.find]
@@ -76,6 +77,7 @@ module = [  # no type information
     "joblib", "joblib.*",
     "shap", "shap.*",
     "tqdm", "tqdm.*",
+    "pythoncom", "win32com", "win32com.*",  # pywin32: Word automation in the report generator
 ]
 ignore_missing_imports = true
 

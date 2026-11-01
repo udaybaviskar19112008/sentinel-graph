@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800" width="1000" height="800">
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #111; }
+    .uc { font-size: 16px; }
+    .act { font-size: 16px; font-weight: 700; }
+    .sys { font-size: 20px; font-weight: 700; }
+    .rel { font-size: 13px; font-style: italic; }
+    .ell { fill: #fff; stroke: #222; stroke-width: 1.5; }
+    .inc { fill: #f1f1f1; stroke: #222; stroke-width: 1.5; }
+    .ln { stroke: #222; stroke-width: 1.3; fill: none; }
+    .dep { stroke: #222; stroke-width: 1.3; fill: none; stroke-dasharray: 6 4; }
+    .fig { stroke: #222; stroke-width: 2; fill: none; }
+  </style>
+  <defs>
+    <marker id="open" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M1,1 L11,6 L1,11" fill="none" stroke="#222" stroke-width="1.6"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="800" fill="#fff"/>
+
+  <!-- System boundary -->
+  <rect x="215" y="20" width="590" height="760" fill="none" stroke="#222" stroke-width="1.8"/>
+  <text class="sys" x="510" y="50" text-anchor="middle">Sentinel-Graph</text>
+
+  <!-- Actor associations (drawn first) -->
+  <g class="ln">
+    <line x1="128" y1="305" x2="250" y2="95"/>
+    <line x1="128" y1="305" x2="250" y2="160"/>
+    <line x1="128" y1="305" x2="250" y2="225"/>
+    <line x1="128" y1="305" x2="250" y2="290"/>
+    <line x1="128" y1="305" x2="250" y2="355"/>
+    <line x1="128" y1="305" x2="250" y2="420"/>
+    <line x1="128" y1="305" x2="250" y2="485"/>
+    <line x1="128" y1="305" x2="250" y2="550"/>
+    <line x1="128" y1="675" x2="250" y2="640"/>
+    <line x1="128" y1="675" x2="250" y2="715"/>
+    <line x1="795" y1="230" x2="882" y2="245"/>
+    <line x1="795" y1="400" x2="882" y2="415"/>
+  </g>
+
+  <!-- Analyst use cases -->
+  <ellipse class="ell" cx="400" cy="95" rx="150" ry="27"/>
+  <text class="uc" x="400" y="101" text-anchor="middle">Upload email (.eml)</text>
+  <ellipse class="ell" cx="400" cy="160" rx="150" ry="27"/>
+  <text class="uc" x="400" y="166" text-anchor="middle">Watch live telemetry</text>
+  <ellipse class="ell" cx="400" cy="225" rx="150" ry="27"/>
+  <text class="uc" x="400" y="231" text-anchor="middle">View risk score and verdict</text>
+  <ellipse class="ell" cx="400" cy="290" rx="150" ry="27"/>
+  <text class="uc" x="400" y="296" text-anchor="middle">Inspect SHAP explanation</text>
+  <ellipse class="ell" cx="400" cy="355" rx="150" ry="27"/>
+  <text class="uc" x="400" y="361" text-anchor="middle">View delivery route</text>
+  <ellipse class="ell" cx="400" cy="420" rx="150" ry="27"/>
+  <text class="uc" x="400" y="426" text-anchor="middle">Browse scan history</text>
+  <ellipse class="ell" cx="400" cy="485" rx="150" ry="27"/>
+  <text class="uc" x="400" y="491" text-anchor="middle">Pivot on an indicator</text>
+  <ellipse class="ell" cx="400" cy="550" rx="150" ry="27"/>
+  <text class="uc" x="400" y="556" text-anchor="middle">Export report (JSON / CSV)</text>
+
+  <!-- Engineer use cases -->
+  <ellipse class="ell" cx="400" cy="640" rx="150" ry="27"/>
+  <text class="uc" x="400" y="646" text-anchor="middle">Check engine health</text>
+  <ellipse class="ell" cx="400" cy="715" rx="150" ry="27"/>
+  <text class="uc" x="400" y="721" text-anchor="middle">Train and evaluate models</text>
+
+  <!-- Included / extending use cases -->
+  <ellipse class="inc" cx="690" cy="150" rx="105" ry="27"/>
+  <text class="uc" x="690" y="156" text-anchor="middle">Analyse email</text>
+  <ellipse class="inc" cx="690" cy="230" rx="105" ry="27"/>
+  <text class="uc" x="690" y="236" text-anchor="middle">Detonate first URL</text>
+  <ellipse class="inc" cx="690" cy="400" rx="105" ry="27"/>
+  <text class="uc" x="690" y="406" text-anchor="middle">Geolocate route hops</text>
+  <ellipse class="inc" cx="690" cy="715" rx="105" ry="27"/>
+  <text class="uc" x="690" y="721" text-anchor="middle">Run ablation study</text>
+
+  <!-- include / extend -->
+  <line class="dep" x1="520" y1="112" x2="603" y2="136" marker-end="url(#open)"/>
+  <text class="rel" x="575" y="108" text-anchor="middle">«include»</text>
+  <line class="dep" x1="690" y1="177" x2="690" y2="201" marker-end="url(#open)"/>
+  <text class="rel" x="700" y="194">«include»</text>
+  <line class="dep" x1="545" y1="365" x2="602" y2="388" marker-end="url(#open)"/>
+  <text class="rel" x="600" y="364" text-anchor="middle">«include»</text>
+  <line class="dep" x1="585" y1="715" x2="552" y2="715" marker-end="url(#open)"/>
+  <text class="rel" x="568" y="697" text-anchor="middle">«extend»</text>
+
+  <!-- Actors -->
+  <g class="fig">
+    <circle cx="110" cy="270" r="14"/>
+    <line x1="110" y1="284" x2="110" y2="330"/>
+    <line x1="84" y1="300" x2="136" y2="300"/>
+    <line x1="110" y1="330" x2="90" y2="365"/>
+    <line x1="110" y1="330" x2="130" y2="365"/>
+  </g>
+  <text class="act" x="110" y="390" text-anchor="middle">SOC analyst</text>
+
+  <g class="fig">
+    <circle cx="110" cy="640" r="14"/>
+    <line x1="110" y1="654" x2="110" y2="700"/>
+    <line x1="84" y1="670" x2="136" y2="670"/>
+    <line x1="110" y1="700" x2="90" y2="735"/>
+    <line x1="110" y1="700" x2="130" y2="735"/>
+  </g>
+  <text class="act" x="110" y="760" text-anchor="middle">ML engineer /</text>
+  <text class="act" x="110" y="780" text-anchor="middle">administrator</text>
+
+  <g class="fig">
+    <circle cx="905" cy="215" r="14"/>
+    <line x1="905" y1="229" x2="905" y2="275"/>
+    <line x1="879" y1="245" x2="931" y2="245"/>
+    <line x1="905" y1="275" x2="885" y2="310"/>
+    <line x1="905" y1="275" x2="925" y2="310"/>
+  </g>
+  <text class="act" x="905" y="335" text-anchor="middle">Lure website</text>
+  <text class="uc" x="905" y="355" text-anchor="middle">(Internet)</text>
+
+  <g class="fig">
+    <circle cx="905" cy="385" r="14"/>
+    <line x1="905" y1="399" x2="905" y2="445"/>
+    <line x1="879" y1="415" x2="931" y2="415"/>
+    <line x1="905" y1="445" x2="885" y2="480"/>
+    <line x1="905" y1="445" x2="925" y2="480"/>
+  </g>
+  <text class="act" x="905" y="505" text-anchor="middle">Geo-IP service</text>
+  <text class="uc" x="905" y="525" text-anchor="middle">(ipapi.co)</text>
+</svg>

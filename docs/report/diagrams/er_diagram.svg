@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 70 1000 485" width="1000" height="485">
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #111; }
+    .ent { font-size: 18px; font-weight: 700; }
+    .tbl { font-size: 14px; font-style: italic; }
+    .att { font-size: 16px; }
+    .card { font-size: 20px; font-weight: 700; }
+    .note { font-size: 14px; }
+    .box { fill: #f1f1f1; stroke: #222; stroke-width: 1.8; }
+    .ell { fill: #fff; stroke: #222; stroke-width: 1.5; }
+    .ln { stroke: #222; stroke-width: 1.5; fill: none; }
+  </style>
+  <rect width="1000" height="560" fill="#fff"/>
+
+  <!-- attribute links (drawn first; shapes paint over them) -->
+  <g class="ln">
+    <line x1="90" y1="150" x2="270" y2="273"/>
+    <line x1="230" y1="105" x2="270" y2="273"/>
+    <line x1="375" y1="150" x2="270" y2="273"/>
+    <line x1="75" y1="273" x2="270" y2="273"/>
+    <line x1="90" y1="405" x2="270" y2="273"/>
+    <line x1="240" y1="450" x2="270" y2="273"/>
+    <line x1="395" y1="405" x2="270" y2="273"/>
+
+    <line x1="690" y1="150" x2="775" y2="273"/>
+    <line x1="860" y1="150" x2="775" y2="273"/>
+    <line x1="660" y1="405" x2="775" y2="273"/>
+    <line x1="790" y1="450" x2="775" y2="273"/>
+    <line x1="910" y1="400" x2="775" y2="273"/>
+
+    <line x1="370" y1="273" x2="405" y2="273"/>
+    <line x1="555" y1="273" x2="650" y2="273"/>
+    <line x1="555" y1="279" x2="650" y2="279"/>
+  </g>
+
+  <!-- Entities -->
+  <rect class="box" x="170" y="245" width="200" height="56"/>
+  <text class="ent" x="270" y="270" text-anchor="middle">EMAIL SCAN</text>
+  <text class="tbl" x="270" y="291" text-anchor="middle">table email_scans</text>
+
+  <rect class="box" x="650" y="245" width="250" height="56"/>
+  <text class="ent" x="775" y="270" text-anchor="middle">EXTRACTED INDICATOR</text>
+  <text class="tbl" x="775" y="291" text-anchor="middle">table extracted_indicators</text>
+
+  <!-- Relationship -->
+  <polygon points="405,273 480,227 555,273 480,319" fill="#fff" stroke="#222" stroke-width="1.8"/>
+  <text class="att" x="480" y="279" text-anchor="middle" font-weight="700">extracts</text>
+  <text class="card" x="386" y="263" text-anchor="middle">1</text>
+  <text class="card" x="600" y="263" text-anchor="middle">N</text>
+
+  <!-- EMAIL SCAN attributes -->
+  <ellipse class="ell" cx="90" cy="150" rx="55" ry="24"/>
+  <text class="att" x="90" y="156" text-anchor="middle" text-decoration="underline">id</text>
+  <ellipse class="ell" cx="230" cy="105" rx="70" ry="24"/>
+  <text class="att" x="230" y="111" text-anchor="middle">timestamp</text>
+  <ellipse class="ell" cx="375" cy="150" rx="62" ry="24"/>
+  <text class="att" x="375" y="156" text-anchor="middle">subject</text>
+  <ellipse class="ell" cx="75" cy="273" rx="66" ry="24"/>
+  <text class="att" x="75" y="279" text-anchor="middle">sender</text>
+  <ellipse class="ell" cx="90" cy="405" rx="80" ry="24"/>
+  <text class="att" x="90" y="411" text-anchor="middle">analyst_trace</text>
+  <ellipse class="ell" cx="240" cy="450" rx="78" ry="24"/>
+  <text class="att" x="240" y="456" text-anchor="middle">final_verdict</text>
+  <ellipse class="ell" cx="395" cy="405" rx="72" ry="24"/>
+  <text class="att" x="395" y="411" text-anchor="middle">overall_risk</text>
+
+  <!-- EXTRACTED INDICATOR attributes -->
+  <ellipse class="ell" cx="690" cy="150" rx="55" ry="24"/>
+  <text class="att" x="690" y="156" text-anchor="middle" text-decoration="underline">id</text>
+  <ellipse class="ell" cx="860" cy="150" rx="74" ry="24" stroke-dasharray="5 4"/>
+  <text class="att" x="860" y="156" text-anchor="middle">scan_id (FK)</text>
+  <ellipse class="ell" cx="660" cy="405" rx="55" ry="24"/>
+  <text class="att" x="660" y="411" text-anchor="middle">type</text>
+  <ellipse class="ell" cx="790" cy="450" rx="58" ry="24"/>
+  <text class="att" x="790" y="456" text-anchor="middle">value</text>
+  <ellipse class="ell" cx="910" cy="400" rx="82" ry="24"/>
+  <text class="att" x="910" y="406" text-anchor="middle">malicious_flag</text>
+
+  <!-- Notes -->
+  <text class="note" x="20" y="515">Underlined: primary key. Dashed: foreign key to EMAIL SCAN.id (ON DELETE CASCADE). Double line: every indicator belongs to exactly one scan.</text>
+  <text class="note" x="20" y="540">Constraints: overall_risk BETWEEN 0 AND 100 · index on (type, value) for indicator pivots · type ∈ {IP, URL, DOMAIN}.</text>
+</svg>

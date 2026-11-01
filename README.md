@@ -405,11 +405,13 @@ src/fusion/          meta-scorer, SHAP engine
 scripts/             train_orchestrator.py (lazy ingestion, cross-fitting, OOF CV),
                      fetch_modern_corpus.py (research: SpamAssassin 2002-03 ham + Nazario 2004-07;
                      real: Nazario 2023-25 + your benign mbox; synthetic smoke tests),
-                     run_ablation_study.py (drop-column ablation -> models_research/ablation_results.md)
+                     run_ablation_study.py (drop-column ablation -> models_research/ablation_results.md),
+                     generate_custom_report.py (project report in the SIICS format -> build/report/)
 tests/               371 tests, including tests/e2e/
 frontend/            React 19 + Vite + Tailwind + Three.js + React Flow dashboard
   src/pages/         LiveDetonation (/), ThreatHistory (/history), MLAnalysis (/ml-forensics), Reports (/reports)
-docs/                CAPSTONE_PRESENTATION.md (12-min talk), CAPSTONE_DEFENSE.md (5-min talk + Q&A)
+docs/                CAPSTONE_PRESENTATION.md (12-min talk), CAPSTONE_DEFENSE.md (5-min talk + Q&A),
+                     report/ (UML diagrams as SVG and dashboard snapshots for the project report)
 ```
 
 ---

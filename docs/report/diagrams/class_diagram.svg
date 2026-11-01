@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 905" width="1000" height="905">
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #111; }
+    .n { font-size: 16px; font-weight: 700; }
+    .st { font-size: 13px; font-style: italic; }
+    .m { font-size: 14px; }
+    .lbl { font-size: 13px; }
+    .hd { fill: #e9e9e9; stroke: #222; stroke-width: 1.5; }
+    .cp { fill: #fff; stroke: #222; stroke-width: 1.5; }
+    .ln { stroke: #222; stroke-width: 1.4; fill: none; }
+    .dep { stroke: #222; stroke-width: 1.4; fill: none; stroke-dasharray: 6 4; }
+    .dia { fill: #222; stroke: #222; stroke-width: 1; }
+  </style>
+  <defs>
+    <marker id="open" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M1,1 L11,6 L1,11" fill="none" stroke="#222" stroke-width="1.6"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="905" fill="#fff"/>
+
+  <!-- ===== Column 1 ===== -->
+  <!-- ConnectionManager -->
+  <rect class="hd" x="15" y="15" width="290" height="30"/>
+  <text class="n" x="160" y="36" text-anchor="middle">ConnectionManager</text>
+  <rect class="cp" x="15" y="45" width="290" height="28"/>
+  <text class="m" x="23" y="62">active_connections: list[WebSocket]</text>
+  <rect class="cp" x="15" y="73" width="290" height="68"/>
+  <text class="m" x="23" y="90">+ connect(websocket)</text>
+  <text class="m" x="23" y="110">+ disconnect(websocket)</text>
+  <text class="m" x="23" y="130">+ send_telemetry(message, websocket)</text>
+
+  <!-- AnalysisEngines -->
+  <rect class="hd" x="15" y="180" width="290" height="44"/>
+  <text class="st" x="160" y="197" text-anchor="middle">«dataclass, frozen»</text>
+  <text class="n" x="160" y="216" text-anchor="middle">AnalysisEngines</text>
+  <rect class="cp" x="15" y="224" width="290" height="108"/>
+  <text class="m" x="23" y="241">detector: VisualSpoofDetector</text>
+  <text class="m" x="23" y="261">memae: GraphMemAE</text>
+  <text class="m" x="23" y="281">meta: FusionMetaModel</text>
+  <text class="m" x="23" y="301">slm: CognitiveSLM</text>
+  <text class="m" x="23" y="321">brands: frozenset[str]</text>
+  <rect class="cp" x="15" y="332" width="290" height="48"/>
+  <text class="m" x="23" y="349">+ load(): AnalysisEngines</text>
+  <text class="m" x="23" y="369">+ model_status: dict[str, bool]</text>
+
+  <!-- VisualSpoofDetector -->
+  <rect class="hd" x="15" y="425" width="290" height="30"/>
+  <text class="n" x="160" y="446" text-anchor="middle">VisualSpoofDetector</text>
+  <rect class="cp" x="15" y="455" width="290" height="48"/>
+  <text class="m" x="23" y="472">model_path: Path</text>
+  <text class="m" x="23" y="492">is_placeholder: bool</text>
+  <rect class="cp" x="15" y="503" width="290" height="48"/>
+  <text class="m" x="23" y="520">+ embed(image_bytes): ndarray</text>
+  <text class="m" x="23" y="540">+ analyze_screenshot(image_bytes)</text>
+
+  <!-- EmailScanRecord -->
+  <rect class="hd" x="15" y="690" width="290" height="44"/>
+  <text class="st" x="160" y="707" text-anchor="middle">«SQLAlchemy entity»</text>
+  <text class="n" x="160" y="726" text-anchor="middle">EmailScanRecord</text>
+  <rect class="cp" x="15" y="734" width="290" height="148"/>
+  <text class="m" x="23" y="751">id: int «PK»</text>
+  <text class="m" x="23" y="771">timestamp: datetime (UTC)</text>
+  <text class="m" x="23" y="791">subject: str</text>
+  <text class="m" x="23" y="811">sender: str</text>
+  <text class="m" x="23" y="831">final_verdict: VerdictLevel</text>
+  <text class="m" x="23" y="851">overall_risk: int [0..100]</text>
+  <text class="m" x="23" y="871">analyst_trace: str</text>
+  <rect class="cp" x="15" y="882" width="290" height="10"/>
+
+  <!-- ===== Column 2 ===== -->
+  <!-- orchestrator -->
+  <rect class="hd" x="345" y="15" width="310" height="44"/>
+  <text class="st" x="500" y="32" text-anchor="middle">«module»</text>
+  <text class="n" x="500" y="51" text-anchor="middle">orchestrator</text>
+  <rect class="cp" x="345" y="59" width="310" height="10"/>
+  <rect class="cp" x="345" y="69" width="310" height="108"/>
+  <text class="m" x="353" y="86">+ stream_analysis_pipeline(…)</text>
+  <text class="m" x="353" y="106">- _protocol_forensics(raw, brands)</text>
+  <text class="m" x="353" y="126">- _vision_branch(urls, engines, emit)</text>
+  <text class="m" x="353" y="146">- _topology_branch(routing, urls, …)</text>
+  <text class="m" x="353" y="166">- _save_scan(session, findings, …)</text>
+
+  <!-- GraphMemAE -->
+  <rect class="hd" x="345" y="215" width="310" height="44"/>
+  <text class="st" x="500" y="232" text-anchor="middle">«torch.nn.Module»</text>
+  <text class="n" x="500" y="251" text-anchor="middle">GraphMemAE</text>
+  <rect class="cp" x="345" y="259" width="310" height="68"/>
+  <text class="m" x="353" y="276">memory: Parameter (50 × 16)</text>
+  <text class="m" x="353" y="296">zero_day_threshold: float</text>
+  <text class="m" x="353" y="316">is_placeholder: bool</text>
+  <rect class="cp" x="345" y="327" width="310" height="108"/>
+  <text class="m" x="353" y="344">+ encode(x, edge_index): Tensor</text>
+  <text class="m" x="353" y="364">+ address(latent): Tensor</text>
+  <text class="m" x="353" y="384">+ decode(latent)</text>
+  <text class="m" x="353" y="404">+ compute_anomaly_loss(dag): float</text>
+  <text class="m" x="353" y="424">+ is_zero_day(loss): bool</text>
+
+  <!-- FusionMetaModel -->
+  <rect class="hd" x="345" y="475" width="310" height="30"/>
+  <text class="n" x="500" y="496" text-anchor="middle">FusionMetaModel</text>
+  <rect class="cp" x="345" y="505" width="310" height="68"/>
+  <text class="m" x="353" y="522">model: RandomForestClassifier</text>
+  <text class="m" x="353" y="542">feature_names: tuple[str, …]</text>
+  <text class="m" x="353" y="562">is_dummy: bool</text>
+  <rect class="cp" x="345" y="573" width="310" height="48"/>
+  <text class="m" x="353" y="590">+ predict_risk(features): float</text>
+  <text class="m" x="353" y="610">+ save(path)</text>
+
+  <!-- CognitiveSLM -->
+  <rect class="hd" x="345" y="660" width="310" height="30"/>
+  <text class="n" x="500" y="681" text-anchor="middle">CognitiveSLM</text>
+  <rect class="cp" x="345" y="690" width="310" height="28"/>
+  <text class="m" x="353" y="707">is_dummy: bool</text>
+  <rect class="cp" x="345" y="718" width="310" height="48"/>
+  <text class="m" x="353" y="735">+ stream_reasoning(prompt)</text>
+  <text class="m" x="353" y="755">+ get_full_analysis(prompt)</text>
+
+  <!-- ===== Column 3 ===== -->
+  <!-- ThreatAssessment -->
+  <rect class="hd" x="695" y="15" width="300" height="44"/>
+  <text class="st" x="845" y="32" text-anchor="middle">«Pydantic model, frozen»</text>
+  <text class="n" x="845" y="51" text-anchor="middle">ThreatAssessment</text>
+  <rect class="cp" x="695" y="59" width="300" height="108"/>
+  <text class="m" x="703" y="76">header_forensics: HeaderForensics</text>
+  <text class="m" x="703" y="96">vision_forensics: VisionForensics | None</text>
+  <text class="m" x="703" y="116">topology_forensics: TopologyForensics</text>
+  <text class="m" x="703" y="136">overall_risk: int [0..100]</text>
+  <text class="m" x="703" y="156">analyst_trace: str</text>
+  <rect class="cp" x="695" y="167" width="300" height="10"/>
+
+  <!-- HeaderForensics -->
+  <rect class="hd" x="695" y="215" width="300" height="30"/>
+  <text class="n" x="845" y="236" text-anchor="middle">HeaderForensics</text>
+  <rect class="cp" x="695" y="245" width="300" height="148"/>
+  <text class="m" x="703" y="262">spf, dkim, dmarc, arc: AuthStatus</text>
+  <text class="m" x="703" y="282">display_name_spoof_risk: float</text>
+  <text class="m" x="703" y="302">route_hop_count: int</text>
+  <text class="m" x="703" y="322">private_ip_leak: bool</text>
+  <text class="m" x="703" y="342">dga_max_entropy: float</text>
+  <text class="m" x="703" y="362">nlp_urgency_score: float</text>
+  <text class="m" x="703" y="382">extracted_ips, sender domains, …</text>
+  <rect class="cp" x="695" y="393" width="300" height="10"/>
+
+  <!-- VisionForensics -->
+  <rect class="hd" x="695" y="420" width="300" height="30"/>
+  <text class="n" x="845" y="441" text-anchor="middle">VisionForensics</text>
+  <rect class="cp" x="695" y="450" width="300" height="88"/>
+  <text class="m" x="703" y="467">screenshot_hash: str</text>
+  <text class="m" x="703" y="487">visual_spoof_score: float</text>
+  <text class="m" x="703" y="507">detected_brand: str | None</text>
+  <text class="m" x="703" y="527">is_credential_harvester: bool</text>
+  <rect class="cp" x="695" y="538" width="300" height="10"/>
+
+  <!-- TopologyForensics -->
+  <rect class="hd" x="695" y="560" width="300" height="30"/>
+  <text class="n" x="845" y="581" text-anchor="middle">TopologyForensics</text>
+  <rect class="cp" x="695" y="590" width="300" height="68"/>
+  <text class="m" x="703" y="607">graph_nodes_count: int</text>
+  <text class="m" x="703" y="627">memae_reconstruction_loss: float</text>
+  <text class="m" x="703" y="647">is_zero_day_route: bool</text>
+  <rect class="cp" x="695" y="658" width="300" height="10"/>
+
+  <!-- ExtractedIndicator -->
+  <rect class="hd" x="695" y="700" width="300" height="44"/>
+  <text class="st" x="845" y="717" text-anchor="middle">«SQLAlchemy entity»</text>
+  <text class="n" x="845" y="736" text-anchor="middle">ExtractedIndicator</text>
+  <rect class="cp" x="695" y="744" width="300" height="108"/>
+  <text class="m" x="703" y="761">id: int «PK»</text>
+  <text class="m" x="703" y="781">scan_id: int «FK»</text>
+  <text class="m" x="703" y="801">type: IndicatorType (IP | URL | DOMAIN)</text>
+  <text class="m" x="703" y="821">value: str</text>
+  <text class="m" x="703" y="841">malicious_flag: bool</text>
+  <rect class="cp" x="695" y="852" width="300" height="10"/>
+
+  <!-- ===== Relationships ===== -->
+  <!-- dependencies of the orchestrator -->
+  <line class="dep" x1="345" y1="95" x2="307" y2="95" marker-end="url(#open)"/>
+  <line class="dep" x1="655" y1="95" x2="693" y2="95" marker-end="url(#open)"/>
+  <polyline class="dep" points="345,160 325,160 325,200 307,200" marker-end="url(#open)"/>
+
+  <!-- AnalysisEngines composes the four engines -->
+  <polygon class="dia" points="160,380 166,388 160,396 154,388"/>
+  <line class="ln" x1="160" y1="396" x2="160" y2="425"/>
+  <polygon class="dia" points="305,250 313,245 321,250 313,255"/>
+  <polyline class="ln" points="321,250 331,250 331,290 345,290"/>
+  <polygon class="dia" points="305,300 313,295 321,300 313,305"/>
+  <polyline class="ln" points="321,300 339,300 339,540 345,540"/>
+  <polygon class="dia" points="305,350 313,345 321,350 313,355"/>
+  <polyline class="ln" points="321,350 331,350 331,710 345,710"/>
+
+  <!-- ThreatAssessment composes its forensics records -->
+  <polygon class="dia" points="845,177 851,185 845,193 839,185"/>
+  <line class="ln" x1="845" y1="193" x2="845" y2="215"/>
+  <polygon class="dia" points="695,150 687,145 679,150 687,155"/>
+  <polyline class="ln" points="679,150 670,150 670,610 695,610"/>
+  <line class="ln" x1="670" y1="475" x2="695" y2="475"/>
+
+  <!-- EmailScanRecord owns its indicators -->
+  <polygon class="dia" points="305,790 313,785 321,790 313,795"/>
+  <line class="ln" x1="321" y1="790" x2="695" y2="790"/>
+  <text class="lbl" x="330" y="782">1</text>
+  <text class="lbl" x="689" y="782" text-anchor="end">0..*</text>
+  <text class="lbl" x="500" y="782" text-anchor="middle">indicators</text>
+  <text class="lbl" x="500" y="808" text-anchor="middle">(cascade delete)</text>
+</svg>

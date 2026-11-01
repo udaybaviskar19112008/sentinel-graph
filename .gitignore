@@ -10,8 +10,14 @@
 /models/topology/*
 !/models/topology/memae.pt
 !/models/topology/memae.onnx
+# The deployed run's ROC and loss charts (cited in the README and the project report)
+!/models/roc_auc_curve.png
+!/models/training_loss.png
 # Candidates and archived model sets (models_research/, models_baseline_2002/, ...)
 /models_*/
+
+# Project report: the institute letterhead is extracted locally from the format PDF
+/docs/report/assets/
 
 # Python
 __pycache__/

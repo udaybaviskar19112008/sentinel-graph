@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1175" width="900" height="1175">
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #111; }
+    .a { font-size: 16px; }
+    .ab { font-size: 16px; font-weight: 700; }
+    .sm { font-size: 14px; }
+    .g { font-size: 14px; font-style: italic; }
+    .act { fill: #fff; stroke: #222; stroke-width: 1.6; }
+    .dec { fill: #f1f1f1; stroke: #222; stroke-width: 1.6; }
+    .note { fill: #fafafa; stroke: #555; stroke-width: 1.2; }
+    .ln { stroke: #222; stroke-width: 1.5; fill: none; }
+    .dep { stroke: #555; stroke-width: 1.2; fill: none; stroke-dasharray: 5 4; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#222"/>
+    </marker>
+  </defs>
+  <rect width="900" height="1175" fill="#fff"/>
+
+  <!-- start -->
+  <circle cx="450" cy="28" r="11" fill="#111"/>
+  <line class="ln" x1="450" y1="39" x2="450" y2="62" marker-end="url(#a)"/>
+  <rect class="act" x="230" y="64" width="440" height="46" rx="20"/>
+  <text class="a" x="450" y="93" text-anchor="middle">Receive raw email (one binary frame)</text>
+  <line class="ln" x1="450" y1="110" x2="450" y2="126" marker-end="url(#a)"/>
+
+  <!-- size check -->
+  <polygon class="dec" points="390,158 450,128 510,158 450,188"/>
+  <text class="sm" x="380" y="163" text-anchor="end">size ≤ 16 MiB?</text>
+  <line class="ln" x1="510" y1="158" x2="638" y2="158" marker-end="url(#a)"/>
+  <text class="g" x="560" y="150" text-anchor="middle">[no]</text>
+  <rect class="act" x="640" y="135" width="230" height="46" rx="20"/>
+  <text class="sm" x="755" y="163" text-anchor="middle">Send error event, close socket</text>
+  <line class="ln" x1="755" y1="181" x2="755" y2="211" marker-end="url(#a)"/>
+  <circle cx="755" cy="226" r="13" fill="#fff" stroke="#222" stroke-width="2"/>
+  <line class="ln" x1="746" y1="217" x2="764" y2="235"/>
+  <line class="ln" x1="764" y1="217" x2="746" y2="235"/>
+  <line class="ln" x1="450" y1="188" x2="450" y2="214" marker-end="url(#a)"/>
+  <text class="g" x="458" y="206">[yes]</text>
+
+  <!-- Tier 1 -->
+  <rect class="act" x="200" y="216" width="500" height="56" rx="20"/>
+  <text class="ab" x="450" y="240" text-anchor="middle">Tier 1 · protocol forensics</text>
+  <text class="sm" x="450" y="262" text-anchor="middle">MIME · authentication · route · DGA entropy · NLP coercion</text>
+  <line class="ln" x1="450" y1="272" x2="450" y2="296" marker-end="url(#a)"/>
+
+  <!-- fork -->
+  <rect x="170" y="298" width="560" height="7" fill="#111"/>
+
+  <!-- vision branch -->
+  <line class="ln" x1="285" y1="305" x2="285" y2="328" marker-end="url(#a)"/>
+  <polygon class="dec" points="240,360 285,330 330,360 285,390"/>
+  <text class="sm" x="338" y="355">URL found?</text>
+  <line class="ln" x1="285" y1="390" x2="285" y2="414" marker-end="url(#a)"/>
+  <text class="g" x="293" y="408">[yes]</text>
+  <rect class="act" x="145" y="416" width="280" height="46" rx="20"/>
+  <text class="a" x="285" y="444" text-anchor="middle">Detonate first URL in sandbox</text>
+  <line class="ln" x1="285" y1="462" x2="285" y2="484" marker-end="url(#a)"/>
+  <polygon class="dec" points="240,516 285,486 330,516 285,546"/>
+  <text class="sm" x="338" y="511">screenshot?</text>
+  <line class="ln" x1="285" y1="546" x2="285" y2="570" marker-end="url(#a)"/>
+  <text class="g" x="293" y="564">[yes]</text>
+  <rect class="act" x="145" y="572" width="280" height="46" rx="20"/>
+  <text class="a" x="285" y="600" text-anchor="middle">Embed screenshot (ONNX)</text>
+  <line class="ln" x1="285" y1="618" x2="285" y2="640" marker-end="url(#a)"/>
+  <polygon class="dec" points="263,664 285,642 307,664 285,686"/>
+  <polyline class="ln" points="240,360 110,360 110,664 261,664" marker-end="url(#a)"/>
+  <text class="g" x="150" y="352">[no]</text>
+  <line class="ln" x1="240" y1="516" x2="110" y2="516"/>
+  <text class="g" x="150" y="508">[no]</text>
+  <line class="ln" x1="285" y1="686" x2="285" y2="738" marker-end="url(#a)"/>
+
+  <!-- topology branch -->
+  <line class="ln" x1="615" y1="305" x2="615" y2="334" marker-end="url(#a)"/>
+  <rect class="act" x="490" y="336" width="250" height="46" rx="20"/>
+  <text class="a" x="615" y="364" text-anchor="middle">Build delivery DAG</text>
+  <line class="ln" x1="615" y1="382" x2="615" y2="404" marker-end="url(#a)"/>
+  <rect class="act" x="490" y="406" width="250" height="46" rx="20"/>
+  <text class="a" x="615" y="434" text-anchor="middle">Compute MemAE loss</text>
+  <line class="ln" x1="615" y1="452" x2="615" y2="474" marker-end="url(#a)"/>
+  <rect class="act" x="470" y="476" width="290" height="56" rx="20"/>
+  <text class="a" x="615" y="500" text-anchor="middle">Flag zero-day route</text>
+  <text class="sm" x="615" y="521" text-anchor="middle">if loss &gt; 1.10</text>
+  <line class="ln" x1="615" y1="532" x2="615" y2="738" marker-end="url(#a)"/>
+  <text class="g" x="625" y="640">concurrent with the vision branch</text>
+
+  <!-- join -->
+  <rect x="170" y="740" width="560" height="7" fill="#111"/>
+  <line class="ln" x1="450" y1="747" x2="450" y2="770" marker-end="url(#a)"/>
+
+  <!-- reasoning, fusion, persistence -->
+  <rect class="act" x="230" y="772" width="440" height="46" rx="20"/>
+  <text class="a" x="450" y="800" text-anchor="middle">Build injection-hardened SLM prompt</text>
+  <line class="ln" x1="450" y1="818" x2="450" y2="840" marker-end="url(#a)"/>
+  <rect class="act" x="200" y="842" width="500" height="56" rx="20"/>
+  <text class="a" x="450" y="866" text-anchor="middle">Stream reasoning tokens to the dashboard</text>
+  <text class="sm" x="450" y="888" text-anchor="middle">extract the verdict (escalate, never downgrade)</text>
+  <line class="ln" x1="450" y1="898" x2="450" y2="920" marker-end="url(#a)"/>
+  <rect class="act" x="200" y="922" width="500" height="56" rx="20"/>
+  <text class="a" x="450" y="946" text-anchor="middle">Build the 12-feature vector</text>
+  <text class="sm" x="450" y="968" text-anchor="middle">Random Forest risk score + exact TreeSHAP attribution</text>
+  <line class="ln" x1="450" y1="978" x2="450" y2="1000" marker-end="url(#a)"/>
+  <rect class="act" x="230" y="1002" width="440" height="46" rx="20"/>
+  <text class="a" x="450" y="1030" text-anchor="middle">Save scan and indicators to SQLite</text>
+  <line class="dep" x1="670" y1="1025" x2="690" y2="1025"/>
+  <path class="note" d="M690,995 h175 l15,15 v50 h-190 z"/>
+  <text class="sm" x="700" y="1017">A database fault is</text>
+  <text class="sm" x="700" y="1035">logged and rolled back;</text>
+  <text class="sm" x="700" y="1053">the verdict is still sent</text>
+  <line class="ln" x1="450" y1="1048" x2="450" y2="1070" marker-end="url(#a)"/>
+  <rect class="act" x="230" y="1072" width="440" height="46" rx="20"/>
+  <text class="a" x="450" y="1100" text-anchor="middle">Emit COMPLETE event, close socket</text>
+  <line class="ln" x1="450" y1="1118" x2="450" y2="1138" marker-end="url(#a)"/>
+  <circle cx="450" cy="1154" r="14" fill="#fff" stroke="#222" stroke-width="2"/>
+  <circle cx="450" cy="1154" r="8" fill="#111"/>
+
+  <!-- telemetry note -->
+  <path class="note" d="M20,860 h150 l15,15 v85 h-165 z"/>
+  <text class="sm" x="30" y="883">Every action</text>
+  <text class="sm" x="30" y="902">streams a telemetry</text>
+  <text class="sm" x="30" y="921">event to the</text>
+  <text class="sm" x="30" y="940">dashboard</text>
+</svg>
