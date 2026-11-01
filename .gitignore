@@ -45,3 +45,8 @@ venv/
 
 # Design-skill working files (screenshots, inspector reports)
 /.taste-skill/
+
+# Defense deck: built locally by scripts/generate_ppt.py, not shipped
+/Sentinel_Graph_Defense.pptx
+# Office lock files (~$<name>.pptx exists while a deck is open)
+~$*
