@@ -31,7 +31,8 @@ export function Layout({ children, onFile }: { children: ReactNode; onFile: (fil
   return (
     <div className="flex h-full w-full flex-col md:flex-row">
       <SidebarNavigation />
-      <main ref={canvasRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      {/* Vertical scrolling only: nothing on a page may push it sideways. */}
+      <main ref={canvasRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
         {children}
       </main>
       {dragging && (

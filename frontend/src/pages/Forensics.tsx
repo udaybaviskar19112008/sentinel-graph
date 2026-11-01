@@ -30,7 +30,11 @@ const SUBSYSTEM_LABEL: Record<Subsystem, string> = {
 }
 
 // Feature · value · diverging bar · signed impact, shared by the header row and every feature row.
-const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,1.2fr)_4rem] items-center gap-3'
+// On a phone the value column folds away (the selected feature's well still shows it) and
+// labels wrap rather than truncate.
+const ROW_GRID =
+  'grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_3.5rem] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,1.2fr)_4rem]'
+const VALUE_CELL = 'hidden sm:block'
 // A streamed pane (reasoning, log) closing a side column: fixed when the blocks stack, then
 // it takes whatever height its row leaves and scrolls its own overflow, so a long reasoning
 // or log never stretches the page.
@@ -78,7 +82,7 @@ function FeatureAttribution({ assessment, details }: { assessment: ThreatAssessm
 
       <p className={cn(ROW_GRID, 'px-2 pb-1 text-small text-muted')} aria-hidden="true">
         <span>Feature</span>
-        <span>Value</span>
+        <span className={VALUE_CELL}>Value</span>
         <span className="text-center">Impact</span>
         <span className="text-right">SHAP</span>
       </p>
@@ -101,10 +105,12 @@ function FeatureAttribution({ assessment, details }: { assessment: ThreatAssessm
                   'group relative w-full cursor-pointer rounded px-2 py-1.5 text-left transition-colors hover:bg-raised/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                 )}
               >
-                <span className="truncate text-body text-ink">
+                <span className="text-body text-ink sm:truncate">
                   <span className={cn('border-b pb-px', isSelected ? 'border-accent' : 'border-transparent')}>{feature.label}</span>
                 </span>
-                <span className="truncate text-small text-muted">{formatFeature(feature.name, values[feature.name])}</span>
+                <span className={cn('truncate text-small text-muted', VALUE_CELL)}>
+                  {formatFeature(feature.name, values[feature.name])}
+                </span>
                 <span className="relative h-2" aria-hidden="true">
                   <span className="absolute inset-y-[-4px] left-1/2 w-px bg-control" />
                   {contribution && (
@@ -219,7 +225,10 @@ function DeepDive({
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="mt-4 space-y-2 border-t border-rule pt-3 text-body text-ink">{explanation}</div>
+            {/* Explanations read as notes beside the evidence: smaller, quieter, and capped in height. */}
+            <div className="mt-4 max-h-60 space-y-2 overflow-y-auto border-t border-rule pt-3 text-small text-muted">
+              {explanation}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

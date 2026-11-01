@@ -29,7 +29,7 @@ export function PipelineLog({ className }: { className?: string }) {
         </h2>
         <span className="text-small text-muted">Newest first</span>
       </header>
-      <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto font-mono text-body text-muted" aria-live="polite">
+      <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto font-mono text-small text-muted" aria-live="polite">
         <AnimatePresence initial={false}>
           {liveLogs.map((log, index) => (
             // Logs are prepended, so distance from the end is a stable key.

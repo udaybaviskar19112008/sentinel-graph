@@ -22,7 +22,7 @@ export const palette = {
   rule: '#1b1a1f', // row rules inside cards
   control: '#3a3a3e', // control borders, chart baselines, unscored edges
   ink: '#ffffff',
-  muted: '#8a8c92', // secondary text: 5.5:1 on the surface, 4.8:1 on raised
+  muted: '#a1a3a8', // secondary text: 7.2:1 on the surface, 6.2:1 on raised (lifted from #8a8c92, which read as faint)
   accent: '#4a8ad6', // selection lines and focus rings only
   positive: '#22a6a0',
   warning: '#d9a441',

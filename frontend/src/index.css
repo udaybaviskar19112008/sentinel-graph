@@ -7,8 +7,9 @@
   .card {
     @apply min-w-0 rounded-md bg-surface p-5 shadow-card;
   }
+  /* Headings are the brightest, boldest text on a card, so the eye finds each block first. */
   .card-title {
-    @apply text-card font-semibold text-ink;
+    @apply text-card font-bold tracking-tight text-ink;
   }
 
   /* Buttons share one height and one fully round shape. One primary per screen. */

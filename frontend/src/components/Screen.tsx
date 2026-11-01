@@ -28,13 +28,13 @@ export function Screen({
   return (
     <div className={cn('flex min-h-full flex-col px-4 pb-6 pt-5 md:px-8 md:pb-8 md:pt-7', fill && 'xl:h-full', className)}>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-        <div className="min-w-0 max-w-3xl">
+        <div className="min-w-0 max-w-5xl">
           <div className="flex items-baseline gap-2 text-section md:text-title">
             <span className="font-normal text-muted">{PRODUCT_NAME}</span>
             <span className="text-control" aria-hidden="true">
               /
             </span>
-            <h1 className="font-bold">{title}</h1>
+            <h1 className="font-bold tracking-tight">{title}</h1>
           </div>
           {subline && <p className="mt-1 line-clamp-2 text-body text-muted">{subline}</p>}
         </div>

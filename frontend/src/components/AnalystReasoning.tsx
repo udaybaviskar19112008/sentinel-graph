@@ -2,7 +2,11 @@ import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useThreatStore } from '@/store/useThreatStore'
 
-/** The language model's reading of the email, streamed token by token. */
+/**
+ * The language model's reading of the email, streamed token by token, in a contained well:
+ * a quieter grey than the evidence around it, scrolling inside its own frame so a long
+ * reading never takes over the page.
+ */
 export function AnalystReasoning({ className }: { className?: string }) {
   const slmStream = useThreatStore((s) => s.slmStream)
   const standIn = useThreatStore((s) => s.details?.modelStatus.slm_dummy ?? false)
@@ -25,15 +29,12 @@ export function AnalystReasoning({ className }: { className?: string }) {
         </h2>
         {standIn && <span className="pill bg-pill-warning-bg text-pill-warning-ink">Scripted stand-in</span>}
       </header>
-      <div ref={paneRef} className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap text-body text-ink">
-        {slmStream || (
-          <span className="text-muted">
-            No reasoning yet. During a scan the local language model reads the headers, route and sandbox evidence and
-            writes a short deduction that ends in a verdict word. Without a model in models/phi3, a scripted stand-in
-            answers, and its verdict is not evidence.
-          </span>
-        )}
-        {streaming && <span className="ml-0.5 text-muted motion-safe:animate-pulse">▌</span>}
+      <div
+        ref={paneRef}
+        className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md bg-raised px-4 py-3 text-body text-muted"
+      >
+        {slmStream || 'No reasoning yet. The local language model writes its reading here during a scan.'}
+        {streaming && <span className="ml-0.5 motion-safe:animate-pulse">▌</span>}
       </div>
     </section>
   )

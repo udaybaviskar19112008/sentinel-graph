@@ -122,6 +122,10 @@ export function TopologyMap({ className, onBrowse }: { className?: string; onBro
           onEdgesChange={onEdgesChange}
           nodeTypes={NODE_TYPES}
           nodesConnectable={false}
+          // The wheel scrolls the page, not the graph: on a scrolling page a canvas that captures
+          // the wheel traps the reader. Zoom with the controls, a pinch, or by dragging to pan.
+          zoomOnScroll={false}
+          preventScrolling={false}
           fitView
         >
           <FitOnLayout graph={graphNodes} />

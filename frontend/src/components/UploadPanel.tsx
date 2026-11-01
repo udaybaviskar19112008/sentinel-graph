@@ -5,12 +5,13 @@ import { cn } from '@/lib/utils'
 import { useThreatStore } from '@/store/useThreatStore'
 
 // The stages a scan reports, in order, under the phase names its log lines carry (threatStream.describe).
+// Short labels, so three columns hold them on one line each.
 const STAGES: [phase: string, label: string][] = [
   ['RECEIVED', 'Received'],
-  ['TIER_1', 'Header forensics'],
+  ['TIER_1', 'Headers'],
   ['VISION', 'Sandbox'],
   ['TOPOLOGY', 'Route model'],
-  ['SLM_VERDICT', 'Language model'],
+  ['SLM_VERDICT', 'Reasoning'],
   ['COMPLETE', 'Scored'],
 ]
 
@@ -39,7 +40,7 @@ export function UploadPanel({ onFile, className }: { onFile: (file: File) => voi
       <button
         type="button"
         onClick={picker.browse}
-        className="group mt-4 flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-md border border-dashed border-control px-6 py-7 text-center transition-colors hover:border-accent hover:bg-accent/5 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="group mt-4 flex w-full cursor-pointer flex-col items-center gap-1 rounded-md border border-dashed border-control px-6 py-5 text-center transition-colors hover:border-accent hover:bg-accent/5 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <Upload className="mb-1 h-7 w-7 text-muted transition-colors group-hover:text-accent" strokeWidth={1.5} aria-hidden="true" />
         <span className="text-body font-medium text-ink">Drop a raw email (.eml) anywhere</span>
@@ -48,7 +49,7 @@ export function UploadPanel({ onFile, className }: { onFile: (file: File) => voi
       </button>
 
       {started && (
-        <ol className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5" aria-label="Scan progress">
+        <ol className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3" aria-label="Scan progress">
           {STAGES.map(([phase, label]) => {
             const done = seen.has(phase)
             return (

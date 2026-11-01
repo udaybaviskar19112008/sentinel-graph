@@ -79,7 +79,9 @@ export function VerdictCard({ className }: { className?: string }) {
   const placeholders = modelStatus ? standIns(modelStatus) : []
 
   return (
-    <section className={cn('card flex flex-col overflow-y-auto', className)} aria-labelledby="verdict-title">
+    // Children never shrink: in a short column the card scrolls instead, and an empty element
+    // such as the risk track would otherwise be squeezed to nothing.
+    <section className={cn('card flex flex-col overflow-y-auto *:shrink-0', className)} aria-labelledby="verdict-title">
       <header className="flex items-center justify-between gap-3">
         <h2 id="verdict-title" className="card-title">
           Verdict

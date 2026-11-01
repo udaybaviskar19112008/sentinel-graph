@@ -12,14 +12,15 @@ export default {
         // Public Sans is loaded in index.html; offline, the system face takes over.
         sans: ['"Public Sans"', 'Inter', 'system-ui', 'sans-serif'],
       },
-      // The sheet's scale: title 26 · section 20 · card 16 · body 13 · small 12, plus one answer figure.
+      // Title 28 · section 20 · card 18 · body 15 · small 13, plus one answer figure. Raised from the
+      // sheet's dense 26/20/16/13/12 after the scale read as too faint in use.
       fontSize: {
-        figure: ['32px', { lineHeight: '36px', letterSpacing: '-0.02em' }],
-        title: ['26px', { lineHeight: '32px', letterSpacing: '-0.01em' }],
+        figure: ['36px', { lineHeight: '40px', letterSpacing: '-0.02em' }],
+        title: ['28px', { lineHeight: '34px', letterSpacing: '-0.015em' }],
         section: ['20px', { lineHeight: '28px' }],
-        card: ['16px', { lineHeight: '24px' }],
-        body: ['13px', { lineHeight: '20px' }],
-        small: ['12px', { lineHeight: '16px' }],
+        card: ['18px', { lineHeight: '26px', letterSpacing: '-0.01em' }],
+        body: ['15px', { lineHeight: '22px' }],
+        small: ['13px', { lineHeight: '18px' }],
       },
       boxShadow: {
         // Cards only: they sit darker than the ground, so the shadow is what lifts them.
