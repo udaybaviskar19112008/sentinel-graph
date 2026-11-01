@@ -42,6 +42,7 @@ dev = [
     "httpx",  # fastapi.testclient
     "mypy",
     "python-docx",  # scripts/generate_custom_report.py
+    "python-pptx",  # scripts/generate_ppt.py
 ]
 
 [tool.setuptools.packages.find]
@@ -80,6 +81,11 @@ module = [  # no type information
     "pythoncom", "win32com", "win32com.*",  # pywin32: Word automation in the report generator
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# python-pptx leaves RGBColor and its chart-data classes unannotated.
+module = ["scripts.generate_ppt"]
+disallow_untyped_calls = false
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

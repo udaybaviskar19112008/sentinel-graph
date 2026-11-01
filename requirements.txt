@@ -36,8 +36,9 @@ shap==0.54.1
 matplotlib==3.11.0        # training plots
 tqdm==4.68.2
 
-# --- Project report (scripts/generate_custom_report.py) ---
+# --- Project report and defense deck (scripts/generate_custom_report.py, scripts/generate_ppt.py) ---
 python-docx==1.2.0
+python-pptx==1.0.2
 
 # --- Tests / type checking ---
 pytest==9.0.3
