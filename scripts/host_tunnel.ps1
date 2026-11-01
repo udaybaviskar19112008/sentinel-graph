@@ -14,11 +14,18 @@
 # changes on every run. Anyone with it can see the scan history and submit emails.
 param(
     [switch]$SkipBuild,
-    [string]$Python = 'python'
+    [string]$Python = ''
 )
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Port = 5173
+
+if (-not $Python) {
+    # setup.bat records the interpreter it installed the packages into.
+    $recorded = Join-Path $Root '.sentinel-python'
+    $Python = if (Test-Path -LiteralPath $recorded) { "$(Get-Content -LiteralPath $recorded -TotalCount 1)".Trim() } else { '' }
+    if (-not $Python -or -not (Test-Path -LiteralPath $Python)) { $Python = 'python' }
+}
 
 if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
     throw 'cloudflared is not on PATH. Install it: winget install --id Cloudflare.cloudflared'

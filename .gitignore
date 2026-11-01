@@ -36,6 +36,8 @@ htmlcov/
 .venv/
 venv/
 .env
+# The Python setup.bat installed into (per machine; read by run.bat)
+/.sentinel-python
 
 # Training corpora (large, licensed separately)
 /data/

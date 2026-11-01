@@ -22,7 +22,7 @@ Developed by **Uday Babasaheb Baviskar** · Suryadatta International Institute o
 
 ## 🚀 Quick Start (Fresh Clone)
 
-Needs Python 3.12+, Node.js 20+ and git. From the repository root, run the setup script once (pip packages, Playwright Chromium, frontend `node_modules`):
+Needs **64-bit Python 3.12–3.14** (3.15 is too new: the pinned onnxruntime, numpy and scikit-learn have no wheels for it yet) and **Node.js 20.19+ or 22.12+** (Vite 8). A git clone or a GitHub ZIP download both work. From the repository root, run the setup script once; it checks both versions, installs the pip packages, Playwright Chromium and the frontend `node_modules`, and checks that the backend imports:
 
 ```bat
 setup.bat
@@ -32,21 +32,33 @@ setup.bat
 bash setup.sh
 ```
 
-(`setup.bat` on Windows, `bash setup.sh` on macOS/Linux.) Then, on Windows, start everything with one command; it runs the frontend and the backend together, opens the browser, and **Ctrl-C** stops both (pass a Python path, e.g. `run.bat C:\Users\you\anaconda3\python.exe`, to pick an interpreter):
+(`setup.bat` on Windows, `bash setup.sh` on macOS/Linux.) On Windows, setup falls back to other installed Pythons (via the `py` launcher, Anaconda or Miniconda) when `python` is unsuitable, and records the one it used in `.sentinel-python`; pass a path to choose one yourself: `setup.bat C:\Users\you\anaconda3\python.exe`. Then start everything with one command; it runs the frontend and the backend with the same Python, opens the browser once the models have loaded (about 30 s), and **Ctrl-C** (or closing the window) stops both:
 
 ```bat
 run.bat
 ```
 
-Or start the two halves yourself, in two terminals:
+Or start the two halves yourself, in two terminals, with the Python setup installed into:
 
 ```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 ```bash
-cd frontend && npm run dev
+cd frontend
+npm run dev -- --port 5173 --strictPort
 ```
+
+Keep `--strictPort`: if 5173 is taken, Vite would quietly move to 5174, and the backend refuses WebSocket connections from any origin but `localhost:5173` and `127.0.0.1:5173`, so every scan would fail.
+
+**If it does not start (Windows):**
+
+- *"Could not open the browser automatically"*: the servers are running; open http://localhost:5173 yourself. The PC's default-browser setting is broken (Settings → Apps → Default apps).
+- *"Port 5173 (or 8000) is already in use by …"*: close that program; if it is an earlier `run.bat`, close its window or run the `taskkill` command the message prints.
+- *`DLL load failed` from torch or onnxruntime*: install the [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vs/17/release/vc_redist.x64.exe) and run `setup.bat` again.
+- *pip fails on a long file path*: enable Windows long paths (the python.org installer's "Disable path length limit" button), then run `setup.bat` again.
+- *EPERM / EBUSY from npm, or "database is locked"*: the folder is probably synced by OneDrive, which locks files mid-write; move it out (for example to `C:\sentinel-graph`).
+- Logs: the backend prints in the `run.bat` window; the frontend writes to `%TEMP%\sentinel-graph-local\frontend.log`.
 
 Open **http://localhost:5173** and drop one of the `.eml` files from `samples/`. The trained production models ship in the repository (`models/fusion_meta.joblib` — the 12-feature fusion model, OOF ROC-AUC 0.953 — and `models/topology/memae.pt`, about 670 KB in plain git, no Git LFS needed), so the samples score as documented in `samples/README.txt`. The vision and SLM engines are still stand-ins (see the model status table below).
 
@@ -305,7 +317,7 @@ The 2002 AUC is not directly comparable with the research-corpus AUCs: a differe
 
 | | Minimum | Tested |
 |---|---|---|
-| Python | 3.12 | 3.14.6 |
+| Python | 3.12 (64-bit; 3.15 not yet supported) | 3.14.6 |
 | Node.js | 20.19 / 22.12 (Vite 8) | 24.22 LTS |
 | CPU / RAM | 4 cores, 8 GB | Windows 11 laptop, CPU only |
 | Disk | ~3 GB (PyTorch, Chromium, models) | — |
@@ -323,7 +335,7 @@ python -m playwright install chromium
 ```
 
 ```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 The trained fusion and MemAE models ship in `models/`. On first start, any model that is still missing (the vision model always is) is generated as a clearly-flagged placeholder (`GET /api/v1/health` lists them). Retrain with the next section.
@@ -339,7 +351,7 @@ npm install
 ```
 
 ```bash
-npm run dev
+npm run dev -- --port 5173 --strictPort
 ```
 
 Open **http://localhost:5173** and drop an `.eml` file onto the dashboard. Vite proxies `/api` and `/ws` to the backend on port 8000. The sidebar switches between four pages: **Live scan** (`/`, alias `/live`), **History** (`/history`), **ML forensics** (`/ml-forensics`: every feature's value and SHAP impact, with explanations) and **Export** (`/reports`: the current assessment as JSON or CSV, the whole history as CSV). A scan keeps streaming while you browse. Exported CSV text cells that start with `=`, `+`, `-`, `@` or a tab are prefixed with an apostrophe, so attacker-controlled subjects cannot run as spreadsheet formulas.
