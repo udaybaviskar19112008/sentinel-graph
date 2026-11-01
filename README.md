@@ -13,8 +13,8 @@
 ![Three.js](https://img.shields.io/badge/Three.js-WebGL-000000?style=for-the-badge&logo=threedotjs&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 
-**B.E. Information Technology — Capstone Project**<br/>
-Developed by **Uday Babasaheb Baviskar** · JSPM Jayawantrao Sawant College of Engineering
+**B.Sc. Cyber and Digital Science (SYBSc CDS) — Capstone Project**<br/>
+Developed by **Uday Babasaheb Baviskar** · Suryadatta International Institute of Cyber Security (SIICS), Pune · Savitribai Phule Pune University
 
 </div>
 

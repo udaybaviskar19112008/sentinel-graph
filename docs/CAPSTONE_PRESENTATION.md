@@ -1,6 +1,6 @@
 # Sentinel-Graph — Capstone Defense Script
 
-**Presenter:** Uday Babasaheb Baviskar · B.E. Information Technology · JSPM Jayawantrao Sawant College of Engineering
+**Presenter:** Uday Babasaheb Baviskar · B.Sc. Cyber and Digital Science (SYBSc CDS) · Suryadatta International Institute of Cyber Security (SIICS), Pune
 **Format:** 8 slides · ~12 minutes (≈90 s per slide) · live demo optional after Slide 6
 **Rule for the whole talk:** every number below was measured on this codebase. Quote them exactly; do not round up.
 

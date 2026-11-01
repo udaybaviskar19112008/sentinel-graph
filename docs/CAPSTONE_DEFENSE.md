@@ -1,6 +1,6 @@
 # Sentinel-Graph (SOC v2) — 5-Minute Defense Script & Q&A Armor
 
-**Presenter:** Uday Babasaheb Baviskar · B.E. Information Technology · JSPM Jayawantrao Sawant College of Engineering
+**Presenter:** Uday Babasaheb Baviskar · B.Sc. Cyber and Digital Science (SYBSc CDS) · Suryadatta International Institute of Cyber Security (SIICS), Pune
 **Format:** 8 slides · 5 minutes (≈35–40 s per slide, ≈90 spoken words each) · the 12-minute version is [`CAPSTONE_PRESENTATION.md`](CAPSTONE_PRESENTATION.md)
 **Rule:** every number here was measured on this codebase (training report, test suite, or `pytest tests/e2e/test_capstone_defense.py -s`). Quote them exactly. If an examiner asks for a number that is not on this page, say you have not measured it.
 
