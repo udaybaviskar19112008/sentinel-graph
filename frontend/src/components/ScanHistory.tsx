@@ -1,9 +1,9 @@
-import { RefreshCw, TriangleAlert } from 'lucide-react'
+import { Download, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Screen } from '@/components/Screen'
 import { VerdictPill } from '@/components/VerdictCard'
-import { fetchScans, type Indicator, type IndicatorType, type Scan } from '@/lib/historyApi'
+import { downloadText, historyCsv } from '@/lib/exports'
+import { fetchAllScans, fetchScans, type Indicator, type IndicatorType, type Scan } from '@/lib/historyApi'
 import { cn } from '@/lib/utils'
 
 const SHOWN_INDICATORS = 3
@@ -51,12 +51,16 @@ function Bar({ className }: { className: string }) {
   return <span className={cn('block h-3.5 rounded bg-raised', className)} aria-hidden="true" />
 }
 
-/** Past scans from the history API, newest first, with a manual refresh. */
-export function ThreatHistory() {
+/**
+ * Past scans from the history API, newest first, with a manual refresh and a CSV of every
+ * saved scan. The language-model verdict column is what the history database stores.
+ */
+export function ScanHistory() {
   const [scans, setScans] = useState<Scan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updated, setUpdated] = useState<Date | null>(null)
+  const [exporting, setExporting] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null })
   // Bumped by the refresh button; each value runs the fetch effect once more.
   const [generation, setGeneration] = useState(0)
 
@@ -85,31 +89,55 @@ export function ThreatHistory() {
     setGeneration((current) => current + 1)
   }
 
+  const exportAll = async () => {
+    setExporting({ busy: true, message: null })
+    try {
+      const all = await fetchAllScans()
+      downloadText(historyCsv(all), 'sentinel-history.csv', 'text/csv;charset=utf-8')
+      setExporting({ busy: false, message: `${all.length} scan${all.length === 1 ? '' : 's'} exported to sentinel-history.csv` })
+    } catch (caught) {
+      setExporting({ busy: false, message: caught instanceof Error ? caught.message : 'History could not be loaded' })
+    }
+  }
+
   // A refresh keeps the rows already on screen; only the first load shows the skeleton.
   const firstLoad = loading && scans.length === 0
-  const subline = firstLoad
+  const count = firstLoad
     ? 'Loading the scan log…'
     : scans.length === 0
       ? 'No scans recorded yet.'
       : scans.length >= PAGE_SIZE
-        ? `The ${scans.length} most recent scans, newest first. Export has every saved scan.`
+        ? `The ${scans.length} most recent scans, newest first; the CSV holds every saved scan.`
         : `${scans.length} scan${scans.length === 1 ? '' : 's'}, newest first.`
 
   return (
-    <Screen
-      title="Scan history"
-      subline={subline}
-      actions={
-        <>
+    <section className="border-t border-line py-8" aria-labelledby="scan-history-title">
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div>
+          <h2 id="scan-history-title" className="text-card font-medium text-ink">
+            Scan history
+          </h2>
+          <p className="mt-1 text-body text-muted">{count}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
           {updated && <p className="text-small text-muted">Updated {clock(updated)}</p>}
           <button type="button" onClick={refresh} disabled={loading} className="btn btn-secondary">
             <RefreshCw className={cn('h-4 w-4', loading && 'motion-safe:animate-spin')} strokeWidth={1.75} aria-hidden="true" />
             Refresh
           </button>
-        </>
-      }
-    >
-      <section className="card px-0 py-2" aria-label="Scans">
+          <button type="button" onClick={() => void exportAll()} disabled={exporting.busy} className="btn btn-secondary">
+            <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            {exporting.busy ? 'Collecting…' : 'Download CSV'}
+          </button>
+        </div>
+      </header>
+      {exporting.message && (
+        <p className="-mt-2 mb-3 text-small text-muted" role="status">
+          {exporting.message}
+        </p>
+      )}
+
+      <div className="card px-0 py-2">
         {error && (
           <p role="alert" className="flex items-start gap-2 px-5 py-3 text-body text-ink">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-negative" aria-hidden="true" />
@@ -210,7 +238,7 @@ export function ThreatHistory() {
             to start the log.
           </p>
         )}
-      </section>
-    </Screen>
+      </div>
+    </section>
   )
 }

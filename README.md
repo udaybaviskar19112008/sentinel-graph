@@ -128,13 +128,14 @@ flowchart LR
     TA --> DB[("🗄️ SQLite scan history<br/>scans + IP / URL / domain indicators")]
     DB --> HIST["🔎 REST history API<br/>/api/v1/history/scans · /indicators/{value}"]
     WS -. "telemetry events (every step)" .-> Z["🗂️ Zustand store"]
-    Z --> LIVE["🎛️ / Live detonation<br/>verdict · React Flow route map · pipeline log"]
+    Z --> LIVE["🎛️ / Dashboard<br/>upload · verdict and route · globe"]
+    Z --> FOR["🔬 /forensics<br/>SHAP · sender identity · NLP and DGA · route graph · pipeline log"]
     Z --> GEO["🌍 Geo-IP resolver<br/>ipapi.co lookup · flagged hashed fallback"]
     GEO --> GLOBE["🌐 WebGL CyberCanvas<br/>graticule globe · hop-to-hop arcs"]
-    HIST --> HPAGE["📜 /history<br/>Threat intelligence log"]
+    HIST --> HPAGE["📜 /reports<br/>exports and scan history"]
 ```
 
-Tier 1 runs first because every later tier needs its output (bodies, URLs, route); vision and topology then run concurrently. The analysis socket lives in the app shell outside React Router's routes, so switching between the live view and the history log never tears down a scan in flight; the globe sits in its own panel on the live view, beside the list of hops it plots.
+Tier 1 runs first because every later tier needs its output (bodies, URLs, route); vision and topology then run concurrently. The analysis socket lives in the app shell outside React Router's routes, so switching between the dashboard, forensics and reports never tears down a scan in flight; the globe has the dashboard's largest panel, and the verdict beside it lists the hops it plots.
 
 | Stage | Module | What it produces |
 |---|---|---|
@@ -151,7 +152,7 @@ Tier 1 runs first because every later tier needs its output (bodies, URLs, route
 | Streaming | `src/core/orchestrator.py`, `app/main.py` | The fan-out pipeline and the WebSocket API |
 | Persistence | `src/core/database.py`, `src/models/db_models.py` | Async SQLAlchemy scan records and pivotable indicators |
 | History | `src/api/routers/history.py` | Paginated scan log and indicator pivot endpoints |
-| Dashboard | `frontend/src/pages/`, `components/CyberCanvas.tsx`, `lib/geoResolver.ts`, `lib/exports.ts` | Live, history, ML forensics and reports pages; globe and hop geolocation; JSON/CSV export |
+| Dashboard | `frontend/src/pages/`, `components/CyberCanvas.tsx`, `lib/geoResolver.ts`, `lib/exports.ts` | Dashboard, forensics and reports pages; globe and hop geolocation; JSON/CSV export |
 
 **The 12-feature fusion space** — one row per email, in this order (a saved model takes its columns by name):
 
@@ -354,7 +355,7 @@ npm install
 npm run dev -- --port 5173 --strictPort
 ```
 
-Open **http://localhost:5173** and drop an `.eml` file onto the dashboard. Vite proxies `/api` and `/ws` to the backend on port 8000. The sidebar switches between four pages: **Live scan** (`/`, alias `/live`), **History** (`/history`), **ML forensics** (`/ml-forensics`: every feature's value and SHAP impact, with explanations) and **Export** (`/reports`: the current assessment as JSON or CSV, the whole history as CSV). A scan keeps streaming while you browse. Exported CSV text cells that start with `=`, `+`, `-`, `@` or a tab are prefixed with an apostrophe, so attacker-controlled subjects cannot run as spreadsheet formulas.
+Open **http://localhost:5173** and drop an `.eml` file anywhere in the window (or use the upload panel). Vite proxies `/api` and `/ws` to the backend on port 8000. The sidebar switches between three pages: **Dashboard** (`/`: upload, the verdict with the delivery route, and the globe), **Forensics** (`/forensics`: every feature's value and SHAP impact, sender authentication and identity, the route model, NLP coercion and DGA entropy, the language model's reasoning, the route graph and the pipeline log) and **Reports** (`/reports`: the current assessment as JSON or CSV, and the scan history with a CSV of every saved scan). The old addresses `/live`, `/ml-forensics` and `/history` redirect to them. A scan keeps streaming while you browse. Exported CSV text cells that start with `=`, `+`, `-`, `@` or a tab are prefixed with an apostrophe, so attacker-controlled subjects cannot run as spreadsheet formulas.
 
 To keep every hop IP on the machine during a demo, put `VITE_GEO_LOOKUP=off` in `frontend/.env.local` before `npm run dev` (globe positions are then all estimated and labelled as such).
 
@@ -454,7 +455,7 @@ scripts/             train_orchestrator.py (lazy ingestion, cross-fitting, OOF C
                      generate_custom_report.py (project report in the SIICS format -> build/report/)
 tests/               371 tests, including tests/e2e/
 frontend/            React 19 + Vite + Tailwind + Three.js + React Flow dashboard
-  src/pages/         LiveDetonation (/), ThreatHistory (/history), MLAnalysis (/ml-forensics), Reports (/reports)
+  src/pages/         Dashboard (/), Forensics (/forensics), Reports (/reports)
 docs/                CAPSTONE_PRESENTATION.md (12-min talk), CAPSTONE_DEFENSE.md (5-min talk + Q&A),
                      report/ (UML diagrams as SVG and dashboard snapshots for the project report)
 ```

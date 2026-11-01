@@ -10,7 +10,7 @@ const GLOBE_RADIUS = 2
 const ARC_SEGMENTS = 50
 // Lowest an arc's apex may sit, as a multiple of the radius, however far apart its hops are.
 const ARC_APEX = 1.1
-const MARKER_RADIUS = 0.06
+const MARKER_RADIUS = 0.035
 const TILT = 0.35 // radians: idle, the globe leans toward the viewer
 const ESTIMATED_COLOR = palette.muted // a stand-in position, never a risk state
 const GRATICULE_STEP = 30 // degrees between meridians and between parallels

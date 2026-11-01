@@ -1,13 +1,12 @@
-import { BrainCircuit, Database, FileDown, type LucideIcon, Radar } from 'lucide-react'
+import { BrainCircuit, FileText, type LucideIcon, Radar } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { PRODUCT_NAME } from '@/components/Screen'
 import { cn } from '@/lib/utils'
 
 const LINKS: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/', label: 'Live scan', icon: Radar },
-  { to: '/history', label: 'History', icon: Database },
-  { to: '/ml-forensics', label: 'ML engine', icon: BrainCircuit },
-  { to: '/reports', label: 'Export', icon: FileDown },
+  { to: '/', label: 'Dashboard', icon: Radar },
+  { to: '/forensics', label: 'Forensics', icon: BrainCircuit },
+  { to: '/reports', label: 'Reports', icon: FileText },
 ]
 
 /** The product's mark: its own delivery graph, a sender over two route hops with a link off to the side. */

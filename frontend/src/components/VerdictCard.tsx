@@ -1,10 +1,11 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { TriangleAlert } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { type GeoPoint, isPublicIp } from '@/lib/geoResolver'
 import { cn } from '@/lib/utils'
-import { type AuthStatus, type ModelStatus, useThreatStore, type VerdictLevel } from '@/store/useThreatStore'
+import { DECISION_LINE, standIns } from '@/lib/verdict'
+import { useThreatStore, type VerdictLevel } from '@/store/useThreatStore'
 import { riskColor } from '@/theme/colors'
-
-const DECISION_LINE = 50 // the classifier's own threshold: probability 0.5
 
 const VERDICT_PILL: Record<VerdictLevel, string> = {
   BENIGN: 'bg-pill-positive-bg text-pill-positive-ink',
@@ -20,54 +21,70 @@ const VERDICT_LABEL: Record<VerdictLevel, string> = {
   CRITICAL: 'Critical',
 }
 
-/** A verdict as a pale pill of its status hue; the word, not the colour, carries the meaning. */
+/** The language model's verdict (the one stored in history) as a pale pill of its status hue. */
 export function VerdictPill({ verdict }: { verdict: VerdictLevel }) {
   return <span className={cn('pill', VERDICT_PILL[verdict])}>{VERDICT_LABEL[verdict]}</span>
 }
 
-const AUTH_RESULTS = [
-  ['spf', 'SPF'],
-  ['dkim', 'DKIM'],
-  ['dmarc', 'DMARC'],
-  ['arc', 'ARC'],
-] as const
-
-function authTone(status: AuthStatus): string {
-  if (status === 'fail') return 'text-negative'
-  return status === 'pass' ? 'text-ink' : 'text-muted'
+/** The classifier's call at its decision line, which is what the risk score measures. */
+export function DecisionPill({ risk }: { risk: number }) {
+  const phishing = risk >= DECISION_LINE
+  return (
+    <span className={cn('pill', phishing ? 'bg-pill-negative-bg text-pill-negative-ink' : 'bg-pill-positive-bg text-pill-positive-ink')}>
+      {phishing ? 'Phishing' : 'Legitimate'}
+    </span>
+  )
 }
 
-/** Engines answering with untrained stand-ins, whose scores are not evidence. */
-function standIns(status: ModelStatus): string[] {
-  return [
-    status.vision_placeholder && 'vision',
-    status.memae_placeholder && 'MemAE',
-    !status.zero_day_calibrated && 'zero-day threshold',
-    status.fusion_dummy && 'fusion',
-    status.slm_dummy && 'SLM',
-  ].filter((name): name is string => typeof name === 'string')
+function degrees(value: number, positive: string, negative: string): string {
+  return `${Math.abs(value).toFixed(1)}°${value >= 0 ? positive : negative}`
+}
+
+/** Where a hop sits, or why its globe position is only a stand-in. */
+function place(point: GeoPoint): string {
+  if (point.source === 'lookup') return `${degrees(point.lat, 'N', 'S')} ${degrees(point.lng, 'E', 'W')}`
+  return isPublicIp(point.ip) ? 'Estimated: lookup failed' : 'Estimated: private range'
+}
+
+/** The delivery route, sender side first: every relay hop's address and where it is. */
+function RoutePath({ ips, scored }: { ips: string[]; scored: boolean }) {
+  const points = useThreatStore((s) => s.geoCoordinates)
+  if (ips.length === 0) return <p className="text-body text-muted">No relay hop addresses in this email.</p>
+  return (
+    <ol aria-label="Relay hops, sender side first">
+      {ips.map((ip, index) => {
+        const point = points[index]?.ip === ip ? points[index] : null
+        return (
+          <li key={`${index}:${ip}`} className="flex items-baseline gap-3 border-t border-rule py-1.5 first:border-t-0">
+            <span className="w-3 shrink-0 text-small text-muted">{index + 1}</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-small text-ink">{ip}</span>
+            <span className="shrink-0 text-small text-muted">{point ? place(point) : scored ? 'Locating…' : '—'}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
 }
 
 /**
- * The live view's answer: overall risk (0-100) against the decision line, the verdict, the
- * sender authentication results, and any stand-in models called out.
+ * The dashboard's answer, and nothing more: the risk score against the decision line, the
+ * classifier's call, and the route the email took. The evidence behind it is on Forensics.
  */
 export function VerdictCard({ className }: { className?: string }) {
   const reduceMotion = useReducedMotion()
   const risk = useThreatStore((s) => s.assessment?.overall_risk ?? null)
-  const verdict = useThreatStore((s) => s.details?.verdict ?? null)
   const modelStatus = useThreatStore((s) => s.details?.modelStatus ?? null)
-  const header = useThreatStore((s) => s.headerFindings ?? s.assessment?.header_forensics ?? null)
+  const ips = useThreatStore((s) => s.headerFindings?.extracted_ips ?? s.assessment?.header_forensics.extracted_ips ?? null)
   const scanning = useThreatStore((s) => !['IDLE', 'COMPLETE', 'ERROR'].includes(s.currentPhase))
   const placeholders = modelStatus ? standIns(modelStatus) : []
 
   return (
-    <section className={cn('card', className)} aria-labelledby="verdict-title">
+    <section className={cn('card flex flex-col overflow-y-auto', className)} aria-labelledby="verdict-title">
       <header className="flex items-center justify-between gap-3">
         <h2 id="verdict-title" className="card-title">
           Verdict
         </h2>
-        {verdict ? <VerdictPill verdict={verdict} /> : <span className="text-small text-muted">{scanning ? 'Scanning…' : 'Awaiting scan'}</span>}
+        {risk !== null ? <DecisionPill risk={risk} /> : <span className="text-small text-muted">{scanning ? 'Scanning…' : 'Awaiting scan'}</span>}
       </header>
 
       <p className="mt-4 text-small text-muted">Risk score</p>
@@ -79,7 +96,6 @@ export function VerdictCard({ className }: { className?: string }) {
           <span className="ml-1 text-body font-normal text-muted">/100</span>
         </p>
       )}
-
       <div className="relative mt-3 h-2 rounded-full bg-raised" aria-hidden="true">
         {risk !== null && (
           <motion.span
@@ -100,20 +116,24 @@ export function VerdictCard({ className }: { className?: string }) {
         <span className="absolute right-0">100</span>
       </p>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1" aria-label="Sender authentication">
-        {AUTH_RESULTS.map(([key, label]) => (
-          <div key={key} className="flex items-baseline justify-between gap-2">
-            <dt className="text-muted">{label}</dt>
-            <dd className={header ? authTone(header[key]) : 'text-muted'}>{header ? header[key] : '—'}</dd>
-          </div>
-        ))}
-      </dl>
+      <h3 className="mt-5 flex items-baseline justify-between text-body font-medium text-ink">
+        Route
+        {ips && ips.length > 0 && <span className="text-small font-normal text-muted">sender side first</span>}
+      </h3>
+      <div className="mt-1">
+        {ips === null ? <p className="text-body text-muted">The route appears once the headers are read.</p> : <RoutePath ips={ips} scored={risk !== null} />}
+      </div>
 
       {placeholders.length > 0 && (
         <p className="mt-4 flex gap-2 rounded bg-pill-warning-bg px-3 py-2 text-small text-pill-warning-ink">
           <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>Stand-in models, scores not evidence: {placeholders.join(', ')}</span>
         </p>
+      )}
+      {risk !== null && (
+        <Link to="/forensics" className="btn btn-secondary mt-auto self-start">
+          Open forensics
+        </Link>
       )}
     </section>
   )

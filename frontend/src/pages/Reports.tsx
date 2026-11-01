@@ -1,8 +1,8 @@
-import { type ReactNode, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { ScanHistory } from '@/components/ScanHistory'
 import { Screen } from '@/components/Screen'
-import { assessmentReport, downloadText, historyCsv, metricsCsv } from '@/lib/exports'
-import { fetchAllScans } from '@/lib/historyApi'
+import { assessmentReport, downloadText, metricsCsv } from '@/lib/exports'
 import { useThreatStore } from '@/store/useThreatStore'
 
 /** One export: what it holds on the left, the file it writes and its button on the right. */
@@ -52,11 +52,13 @@ function Section({ title, description, children }: { title: string; description:
   )
 }
 
-/** Client-side exports: the current assessment as JSON and CSV, and the whole scan history as CSV. */
+/**
+ * Exports and history: the current assessment as JSON or CSV, then every saved scan, with
+ * its own CSV. Files are built in the browser.
+ */
 export function Reports() {
   const assessment = useThreatStore((s) => s.assessment)
   const details = useThreatStore((s) => s.details)
-  const [history, setHistory] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null })
   const ready = assessment !== null && details !== null
 
   const exportJSON = () => {
@@ -69,19 +71,8 @@ export function Reports() {
     downloadText(metricsCsv(assessment, details), 'sentinel-metrics.csv', 'text/csv;charset=utf-8')
   }
 
-  const exportHistory = async () => {
-    setHistory({ busy: true, message: null })
-    try {
-      const scans = await fetchAllScans()
-      downloadText(historyCsv(scans), 'sentinel-history.csv', 'text/csv;charset=utf-8')
-      setHistory({ busy: false, message: `${scans.length} scan${scans.length === 1 ? '' : 's'} exported` })
-    } catch (caught) {
-      setHistory({ busy: false, message: caught instanceof Error ? caught.message : 'History could not be loaded' })
-    }
-  }
-
   return (
-    <Screen title="Export" subline="Files are built in this browser; nothing is uploaded.">
+    <Screen title="Reports" subline="Exports are built in this browser; nothing is uploaded.">
       <Section
         title="Current scan"
         description={
@@ -127,28 +118,7 @@ export function Reports() {
         </ul>
       </Section>
 
-      <Section title="Scan history" description="Every scan in the history database, with its verdict, risk and indicators.">
-        <div>
-          <ul className="card p-0">
-            <ExportRow
-              title="All saved scans"
-              description="Collected page by page from the history API, newest first"
-              fileName="sentinel-history.csv"
-              action={
-                <button type="button" className="btn btn-secondary" onClick={() => void exportHistory()} disabled={history.busy}>
-                  {history.busy ? 'Collecting…' : 'Download CSV'}
-                </button>
-              }
-            />
-            <FilePreview label="Its columns" content={historyCsv([])} />
-          </ul>
-          {history.message && (
-            <p className="mt-2 text-small text-muted" role="status">
-              {history.message}
-            </p>
-          )}
-        </div>
-      </Section>
+      <ScanHistory />
 
       <Section title="Spreadsheet safety" description="Why some cells in the CSV files start with an apostrophe.">
         <p className="card text-body text-ink">

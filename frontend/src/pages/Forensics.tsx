@@ -2,14 +2,19 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
 import { type ReactNode, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AnalystReasoning } from '@/components/AnalystReasoning'
 import { EntropyScale, UrgencyMeter } from '@/components/HeuristicMeters'
+import { PipelineLog } from '@/components/PipelineLog'
 import { Screen } from '@/components/Screen'
-import { VerdictPill } from '@/components/VerdictCard'
+import { TopologyMap } from '@/components/TopologyMap'
+import { DecisionPill } from '@/components/VerdictCard'
 import { COERCIVE_PHRASES, LEGITIMATE_BAND_BITS } from '@/lib/contentHeuristics'
 import { FEATURE_SPACE, type FeatureName, featureValues, formatFeature } from '@/lib/featureSpace'
 import { cn } from '@/lib/utils'
+import { standIns } from '@/lib/verdict'
 import {
   type AnalysisDetails,
+  type AuthStatus,
   type HeaderForensics,
   type Subsystem,
   type ThreatAssessment,
@@ -26,6 +31,10 @@ const SUBSYSTEM_LABEL: Record<Subsystem, string> = {
 
 // Feature · value · diverging bar · signed impact, shared by the header row and every feature row.
 const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,1.2fr)_4rem] items-center gap-3'
+// A streamed pane (reasoning, log) closing a side column: fixed when the blocks stack, then
+// it takes whatever height its row leaves and scrolls its own overflow, so a long reasoning
+// or log never stretches the page.
+const STREAM_FILL = 'lg:h-auto lg:flex-1'
 
 function signed(impact: number): string {
   return `${impact >= 0 ? '+' : '−'}${Math.abs(impact).toFixed(3)}`
@@ -144,12 +153,48 @@ function FeatureAttribution({ assessment, details }: { assessment: ThreatAssessm
   )
 }
 
+/** Before a scan: the 12 features the fusion model scores, in its order, with what each one measures. */
+function FeatureReference() {
+  return (
+    <section className="card lg:col-span-8" aria-labelledby="attribution-title">
+      <header className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+        <h2 id="attribution-title" className="card-title">
+          Feature attribution (SHAP)
+        </h2>
+        <p className="text-small text-muted">Each feature’s push is drawn here when a scan completes</p>
+      </header>
+      <p className="grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] gap-3 px-2 pb-1 text-small text-muted" aria-hidden="true">
+        <span>Feature</span>
+        <span>What it measures</span>
+      </p>
+      <ul>
+        {FEATURE_SPACE.map((feature) => (
+          <li key={feature.name} className="grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] gap-3 px-2 py-1.5">
+            <span className="truncate text-ink">{feature.label}</span>
+            <span className="text-muted">{feature.summary}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 /** A card whose header expands a "how it works" section. */
-function DeepDive({ title, explanation, children }: { title: string; explanation: ReactNode; children: ReactNode }) {
+function DeepDive({
+  title,
+  explanation,
+  className,
+  children,
+}: {
+  title: string
+  explanation: ReactNode
+  className?: string
+  children: ReactNode
+}) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
   return (
-    <section className="card" aria-label={title}>
+    <section className={cn('card overflow-y-auto', className)} aria-label={title}>
       <header className="flex items-center justify-between gap-3">
         <h2 className="card-title">{title}</h2>
         <button
@@ -182,39 +227,58 @@ function DeepDive({ title, explanation, children }: { title: string; explanation
   )
 }
 
+const AUTH_RESULTS = [
+  ['spf', 'SPF'],
+  ['dkim', 'DKIM'],
+  ['dmarc', 'DMARC'],
+  ['arc', 'ARC'],
+] as const
+
+function authTone(status: AuthStatus): string {
+  if (status === 'fail') return 'text-negative'
+  return status === 'pass' ? 'text-ink' : 'text-muted'
+}
+
 /**
- * Who the email claims to be from, beside the domains that would receive its replies and
- * bounces: the evidence behind display-name spoofing. A domain that differs from the
- * sender's is the row's one red mark.
+ * Who the email claims to be from: the authentication results, then the domains that
+ * would receive its replies and bounces (the evidence behind display-name spoofing). A
+ * domain that differs from the sender's, and a failed check, are the card's red marks.
  */
-function SenderIdentity({ header }: { header: HeaderForensics }) {
-  const from = header.from_domain
+function SenderIdentity({ header }: { header: HeaderForensics | null }) {
+  const from = header?.from_domain ?? null
   const rows: [string, string | null][] = [
     ['From', from],
-    ['Reply-To', header.reply_to_domain],
-    ['Return-Path', header.return_path_domain],
+    ['Reply-To', header?.reply_to_domain ?? null],
+    ['Return-Path', header?.return_path_domain ?? null],
   ]
   const diverges = rows.some(([, domain]) => domain !== null && from !== null && domain !== from)
+  const brand = header?.impersonated_brand ?? null
   return (
     <section className="card" aria-labelledby="sender-identity-title">
       <header className="flex items-center justify-between gap-3">
         <h2 id="sender-identity-title" className="card-title">
           Sender identity
         </h2>
-        {header.impersonated_brand && (
+        {header && brand && (
           <span
             className={cn(
               'pill',
-              header.display_name_spoof_risk >= 1
-                ? 'bg-pill-negative-bg text-pill-negative-ink'
-                : 'bg-pill-warning-bg text-pill-warning-ink',
+              header.display_name_spoof_risk >= 1 ? 'bg-pill-negative-bg text-pill-negative-ink' : 'bg-pill-warning-bg text-pill-warning-ink',
             )}
           >
-            Names {header.impersonated_brand.charAt(0).toUpperCase() + header.impersonated_brand.slice(1)}
+            Names {brand.charAt(0).toUpperCase() + brand.slice(1)}
           </span>
         )}
       </header>
-      <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1" aria-label="Sender authentication">
+        {AUTH_RESULTS.map(([key, label]) => (
+          <div key={key} className="flex items-baseline justify-between gap-2">
+            <dt className="text-muted">{label}</dt>
+            <dd className={header ? authTone(header[key]) : 'text-muted'}>{header ? header[key] : '—'}</dd>
+          </div>
+        ))}
+      </dl>
+      <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 border-t border-rule pt-3">
         {rows.map(([term, domain]) => (
           <div key={term} className="contents">
             <dt className="text-muted">{term}</dt>
@@ -236,11 +300,12 @@ function SenderIdentity({ header }: { header: HeaderForensics }) {
   )
 }
 
-/** The two content heuristics in one card, named as on the live view, each explained under "How it works". */
-function ContentHeuristicsCard({ score, bits }: { score: number | null; bits: number | null }) {
+/** The two content heuristics in one card, each explained under "How it works". */
+function ContentHeuristicsCard({ score, bits, className }: { score: number | null; bits: number | null; className?: string }) {
   return (
     <DeepDive
       title="Content heuristics"
+      className={className}
       explanation={
         <>
           <p className="font-medium">Coercive wording (NLP coercion)</p>
@@ -311,95 +376,68 @@ function RouteModel({ assessment }: { assessment: ThreatAssessment | null }) {
   )
 }
 
-/** Before a scan: the 12 features the fusion model scores, in its order, with what each one measures. */
-function FeatureReference() {
-  return (
-    <section className="card lg:col-span-8" aria-labelledby="attribution-title">
-      <header className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 id="attribution-title" className="card-title">
-          Feature attribution (SHAP)
-        </h2>
-        <p className="text-small text-muted">Each feature’s push is drawn here when a scan completes</p>
-      </header>
-      <p className="grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] gap-3 px-2 pb-1 text-small text-muted" aria-hidden="true">
-        <span>Feature</span>
-        <span>What it measures</span>
-      </p>
-      <ul>
-        {FEATURE_SPACE.map((feature) => (
-          <li key={feature.name} className="grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] gap-3 px-2 py-1.5">
-            <span className="truncate text-ink">{feature.label}</span>
-            <span className="text-muted">{feature.summary}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-/** No scan yet: the screen keeps its frame and shows what it will explain. */
-function EmptyState() {
+/**
+ * Every piece of evidence behind the dashboard's score, top to bottom: what moved the score
+ * (SHAP), who sent it and what the route model saw, the language evidence and the pipeline,
+ * then the delivery route as a graph. Before a scan each block keeps its frame and shows
+ * what it will hold.
+ */
+export function Forensics() {
+  const assessment = useThreatStore((s) => s.assessment)
+  const details = useThreatStore((s) => s.details)
   const analysing = useThreatStore((s) => !['IDLE', 'COMPLETE', 'ERROR'].includes(s.currentPhase))
+  const scored = assessment !== null && details !== null
+  const header = assessment?.header_forensics ?? null
+  const placeholders = details ? standIns(details.modelStatus) : []
+
   return (
     <Screen
-      title="ML forensics"
+      title="Forensics"
       subline={
-        analysing
-          ? 'A scan is running; its evidence appears here when it completes.'
-          : 'No scan to explain yet. After one, this screen breaks its risk score down feature by feature.'
+        scored
+          ? (header?.subject ?? '(no subject)')
+          : analysing
+            ? 'A scan is running; its evidence appears here when it completes.'
+            : 'No scan to explain yet. After one, this screen breaks its risk score down piece by piece.'
       }
       actions={
-        !analysing && (
-          <Link to="/" className="btn btn-secondary">
-            Go to Live scan
-          </Link>
+        scored ? (
+          <div className="text-right">
+            <p className="flex items-center justify-end gap-3">
+              <DecisionPill risk={assessment.overall_risk} />
+              <span className="text-section font-semibold text-ink">
+                {assessment.overall_risk}
+                <span className="ml-1 text-body font-normal text-muted">/100 risk</span>
+              </span>
+            </p>
+            {placeholders.length > 0 && (
+              <p className="mt-1 text-small text-muted">Stand-in models (not evidence): {placeholders.join(', ')}</p>
+            )}
+          </div>
+        ) : (
+          !analysing && (
+            <Link to="/" className="btn btn-secondary">
+              Go to Dashboard
+            </Link>
+          )
         )
       }
     >
-      <div className="grid items-start gap-6 lg:grid-cols-12">
-        <FeatureReference />
-        <div className="flex flex-col gap-6 lg:col-span-4">
-          <ContentHeuristicsCard score={null} bits={null} />
-          <RouteModel assessment={null} />
-        </div>
-      </div>
-    </Screen>
-  )
-}
-
-/** Drill-down into the fusion model's evidence for the current scan. */
-export function MLAnalysis() {
-  const assessment = useThreatStore((s) => s.assessment)
-  const details = useThreatStore((s) => s.details)
-  if (!assessment || !details) return <EmptyState />
-
-  const header = assessment.header_forensics
-  const standIns = [details.modelStatus.vision_placeholder && 'vision', details.modelStatus.slm_dummy && 'language model'].filter(
-    (name): name is string => typeof name === 'string',
-  )
-  return (
-    <Screen
-      title="ML forensics"
-      subline={header.subject ?? '(no subject)'}
-      actions={
-        <div className="text-right">
-          <p className="flex items-center justify-end gap-3">
-            <VerdictPill verdict={details.verdict} />
-            <span className="text-section font-semibold text-ink">
-              {assessment.overall_risk}
-              <span className="ml-1 text-body font-normal text-muted">/100 risk</span>
-            </span>
-          </p>
-          {standIns.length > 0 && <p className="mt-1 text-small text-muted">Stand-in models (not evidence): {standIns.join(', ')}</p>}
-        </div>
-      }
-    >
-      <div className="grid items-start gap-6 lg:grid-cols-12">
-        <FeatureAttribution assessment={assessment} details={details} />
+      {/* Each row ends level: the last card of each side column grows into the row's height. */}
+      <div className="grid gap-6 lg:grid-cols-12">
+        {scored ? <FeatureAttribution assessment={assessment} details={details} /> : <FeatureReference />}
         <div className="flex flex-col gap-6 lg:col-span-4">
           <SenderIdentity header={header} />
-          <ContentHeuristicsCard score={header.nlp_urgency_score} bits={header.dga_max_entropy} />
           <RouteModel assessment={assessment} />
+          <AnalystReasoning className={cn('h-60', STREAM_FILL, 'lg:min-h-[10rem]')} />
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-12">
+        <TopologyMap className="h-[440px] lg:col-span-8" />
+        <div className="flex flex-col gap-6 lg:col-span-4 lg:h-[440px]">
+          <ContentHeuristicsCard score={header?.nlp_urgency_score ?? null} bits={header?.dga_max_entropy ?? null} />
+          <PipelineLog className={cn('h-60', STREAM_FILL, 'lg:min-h-[8rem]')} />
         </div>
       </div>
     </Screen>

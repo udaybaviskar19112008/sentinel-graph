@@ -1,11 +1,6 @@
-import { Upload } from 'lucide-react'
-import { AnalystReasoning } from '@/components/AnalystReasoning'
-import { ContentHeuristics } from '@/components/ContentHeuristics'
-import { useEmailUpload } from '@/components/Dropzone'
-import { PipelineLog } from '@/components/PipelineLog'
 import { RouteGeography } from '@/components/RouteGeography'
 import { Screen } from '@/components/Screen'
-import { TopologyMap } from '@/components/TopologyMap'
+import { UploadPanel } from '@/components/UploadPanel'
 import { VerdictCard } from '@/components/VerdictCard'
 import { FEATURE_SPACE } from '@/lib/featureSpace'
 import { cn } from '@/lib/utils'
@@ -30,10 +25,6 @@ const isRunning = (phase: string) => !['IDLE', 'COMPLETE', 'ERROR'].includes(pha
 const failure = (s: ThreatState): string | null =>
   s.liveLogs[0]?.startsWith('ERROR') ? s.liveLogs[0].replace(/^ERROR\s+/, '') : s.currentPhase === 'ERROR' ? '' : null
 
-// The streamed panes (reasoning, log) end each side column: a fixed height when the blocks
-// stack, then they grow so both columns end level, from two columns up to the console view.
-const STREAM_PANE = 'h-60 md:h-auto md:min-h-[15rem] md:flex-1 xl:min-h-[8rem]'
-
 function strongest(contributions: readonly ShapContribution[]): ShapContribution | null {
   return contributions.reduce<ShapContribution | null>(
     (best, c) => (best === null || Math.abs(c.impact) > Math.abs(best.impact) ? c : best),
@@ -41,7 +32,7 @@ function strongest(contributions: readonly ShapContribution[]): ShapContribution
   )
 }
 
-/** The line under the title: what this scan found, read first, next to the action it drives. */
+/** The line under the title: what this scan found, read first. */
 function useFinding(): string {
   const phase = useThreatStore((s) => s.currentPhase)
   const risk = useThreatStore((s) => s.assessment?.overall_risk ?? null)
@@ -81,55 +72,25 @@ function PhaseStamp() {
 }
 
 /**
- * One email's detonation: the verdict, the delivery route and the evidence behind them.
+ * Three things only: drop an email in, read the verdict, watch the route on the globe.
+ * Every piece of evidence behind the score lives on Forensics; exports on Reports.
  *
- * From 1280px every block shows on the first screen in three columns (answer, route,
- * provenance), the route graph the largest; narrower, the blocks stack and the page scrolls.
- * The whole screen takes a dropped email; the primary button opens the file picker.
+ * From 1280px the globe takes two-thirds of the screen beside the upload and verdict
+ * panels, and nothing scrolls; narrower, the panels stack above the globe.
  * The socket is owned by the App shell, not this page, so leaving mid-scan does not close it.
  */
-export function LiveDetonation({ onFile }: { onFile: (file: File) => void }) {
-  const upload = useEmailUpload(onFile)
+export function Dashboard({ onFile }: { onFile: (file: File) => void }) {
   const finding = useFinding()
 
   return (
-    <div className="relative min-h-full xl:h-full" {...upload.dropHandlers}>
-      <Screen
-        title="Live scan"
-        subline={finding}
-        fill
-        actions={
-          <>
-            <PhaseStamp />
-            <button type="button" className="btn btn-primary" onClick={upload.browse}>
-              <Upload className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-              Analyse an email
-            </button>
-          </>
-        }
-      >
-        {upload.fileInput}
-        <div className="grid flex-1 gap-6 md:grid-cols-2 xl:min-h-0 xl:grid-cols-12">
-          <div className="flex flex-col gap-6 xl:col-span-3 xl:min-h-0">
-            <VerdictCard />
-            <ContentHeuristics />
-            <AnalystReasoning className={STREAM_PANE} />
-          </div>
-          <TopologyMap
-            onBrowse={upload.browse}
-            className="h-[480px] md:order-last md:col-span-2 xl:order-none xl:col-span-6 xl:h-auto xl:min-h-0"
-          />
-          <div className="flex flex-col gap-6 xl:col-span-3 xl:min-h-0">
-            <RouteGeography />
-            <PipelineLog className={STREAM_PANE} />
-          </div>
+    <Screen title="Dashboard" subline={finding} fill actions={<PhaseStamp />}>
+      <div className="grid flex-1 gap-6 md:grid-cols-2 xl:min-h-0 xl:grid-cols-12">
+        <div className="flex flex-col gap-6 md:contents xl:col-span-4 xl:flex xl:min-h-0">
+          <UploadPanel onFile={onFile} />
+          <VerdictCard className="xl:min-h-0 xl:flex-1" />
         </div>
-      </Screen>
-      {upload.dragging && (
-        <div className="pointer-events-none absolute inset-3 z-20 grid place-items-center rounded-md border border-dashed border-accent bg-ground/90 shadow-float">
-          <p className="text-section text-ink">Drop the email to analyse it</p>
-        </div>
-      )}
-    </div>
+        <RouteGeography className="h-[440px] md:col-span-2 xl:order-first xl:col-span-8 xl:h-auto xl:min-h-0" />
+      </div>
+    </Screen>
   )
 }

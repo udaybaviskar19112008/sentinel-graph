@@ -13,6 +13,7 @@ import ReactFlow, {
   useStore,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import { Link } from 'react-router-dom'
 import { ThreatNode } from '@/components/ThreatNode'
 import { type EdgeRisk, edgeRisk } from '@/lib/edgeRisk'
 import { THREAT_NODE_TYPE } from '@/lib/graphLayout'
@@ -68,10 +69,11 @@ function FitOnLayout({ graph }: { graph: unknown }) {
 
 /**
  * The email's delivery route and links, with edges coloured by their SHAP evidence. The
- * legend lists only the kinds of edge on screen. Before the first scan the canvas holds the
- * screen's first action: a slot to drop the email into.
+ * legend lists only the kinds of edge on screen. Before the first scan the canvas says
+ * where the route comes from: a slot to drop the email into when `onBrowse` is given,
+ * otherwise a pointer to the dashboard.
  */
-export function TopologyMap({ className, onBrowse }: { className?: string; onBrowse: () => void }) {
+export function TopologyMap({ className, onBrowse }: { className?: string; onBrowse?: () => void }) {
   const graphNodes = useThreatStore((s) => s.graphNodes)
   const graphEdges = useThreatStore((s) => s.graphEdges)
   const contributions = useThreatStore((s) => s.details?.contributions ?? null)
@@ -133,15 +135,24 @@ export function TopologyMap({ className, onBrowse }: { className?: string; onBro
             </p>
           ) : (
             <div className="absolute inset-5 grid place-items-center rounded-md border border-dashed border-control bg-surface text-center">
-              <div>
-                <p className="text-body text-ink">Drop a raw email (.eml) here</p>
-                <p className="mt-1 text-body text-muted">
-                  or{' '}
-                  <button type="button" className="text-action" onClick={onBrowse}>
-                    choose a file
-                  </button>
+              {onBrowse ? (
+                <div>
+                  <p className="text-body text-ink">Drop a raw email (.eml) here</p>
+                  <p className="mt-1 text-body text-muted">
+                    or{' '}
+                    <button type="button" className="text-action" onClick={onBrowse}>
+                      choose a file
+                    </button>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-body text-muted">
+                  The delivery route is drawn here after a scan.{' '}
+                  <Link to="/" className="text-action">
+                    Analyse an email
+                  </Link>
                 </p>
-              </div>
+              )}
             </div>
           ))}
       </div>
